@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id              String          @id @default(uuid())
+  name            String
+  email           String          @unique
+  password        String
+  ownedCompanies  Company[]       @relation("CompanyOwner")
+  memberships     CompanyMember[]
+  maintenances    Maintenance[]
+
+  @@map("users")
+}
+
+model Company {
+  id             String          @id @default(uuid())
+  company_name   String
+  license_status String
+  owner_id       String
+  owner          User            @relation("CompanyOwner", fields: [owner_id], references: [id])
+  members        CompanyMember[]
+  assets         Asset[]
+
+  @@map("companies")
+}
+
+model CompanyMember {
+  id_user       String
+  id_perusahaan String
+  role          String
+  joined_at     DateTime @default(now())
+
+  user          User     @relation(fields: [id_user], references: [id])
+  company       Company  @relation(fields: [id_perusahaan], references: [id])
+
+  @@id([id_user, id_perusahaan])
+  @@map("company_members")
+}
+
+model Asset {
+  id                  String            @id @default(uuid())
+  id_perusahaan       String
+  asset_name          String
+  purchase_date       DateTime
+  initial_useful_life Int               // in months
+  current_rul         Int               // in months
+  status              String            // Active, Maintenance, Replaced
+
+  company             Company           @relation(fields: [id_perusahaan], references: [id])
+  maintenances        Maintenance[]
+  rul_histories       AssetRulHistory[]
+
+  @@map("assets")
+}
+
+model Maintenance {
+  id               String            @id @default(uuid())
+  id_asset         String
+  id_user          String
+  maintenance_type String
+  scheduled_date   DateTime
+  completion_date  DateTime?
+  rul_impact       Int               // Impact on RUL in months (e.g., +6)
+  cost             Float
+  status           String
+
+  asset            Asset             @relation(fields: [id_asset], references: [id])
+  user             User              @relation(fields: [id_user], references: [id])
+  rul_histories    AssetRulHistory[]
+
+  @@map("maintenances")
+}
+
+model AssetRulHistory {
+  id             String       @id @default(uuid())
+  id_asset       String
+  id_maintenance String?
+  previous_rul   Int
+  new_rul        Int
+  change_reason  String
+  recorded_at    DateTime     @default(now())
+
+  asset          Asset        @relation(fields: [id_asset], references: [id])
+  maintenance    Maintenance? @relation(fields: [id_maintenance], references: [id])
+
+  @@map("asset_rul_history")
+}
