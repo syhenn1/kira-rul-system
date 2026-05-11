@@ -1,0 +1,26 @@
+{
+  "name": "kira-rul-system",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev:frontend": "npm run dev --prefix kira-frontend",
+    "dev:backend": "npm run dev --prefix kira-backend",
+    "dev": "concurrently -c \"blue,green\" -n \"FRONTEND,BACKEND\" \"npm run dev:frontend\" \"npm run dev:backend\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/syhenn1/kira-rul-system.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/syhenn1/kira-rul-system/issues"
+  },
+  "homepage": "https://github.com/syhenn1/kira-rul-system#readme",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

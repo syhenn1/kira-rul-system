@@ -15,7 +15,7 @@ export default function Page() {
         </Link>
         
         <div className="glass rounded-3xl p-10 border border-white/20 shadow-2xl relative overflow-hidden bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl">
-          <h1 className="text-3xl font-bold text-zinc-900 dark:text-white mb-4">Daftar Aset</h1>
+          <h1 className="text-3xl font-bold text-zinc-900 dark:text-white mb-4">Profil Pengguna</h1>
           <p className="text-zinc-600 dark:text-zinc-400">
             Halaman ini sedang dalam tahap pengembangan. Ini adalah placeholder untuk route SaaS Anda.
           </p>
