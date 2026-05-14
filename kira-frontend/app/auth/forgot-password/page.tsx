@@ -1,26 +1,101 @@
 'use client';
-import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
 
-export default function Page() {
+import Link from 'next/link';
+
+export default function ForgotPasswordPage() {
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-[#050505] py-20 px-6 relative">
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-[400px] opacity-20 pointer-events-none">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 blur-[100px] rounded-full mix-blend-multiply dark:mix-blend-screen"></div>
-      </div>
-      
-      <div className="max-w-4xl mx-auto relative z-10">
-        <Link href="/" className="inline-flex items-center text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-white mb-8 transition-colors">
-          <ArrowLeft className="w-4 h-4 mr-2" /> Kembali ke Beranda
-        </Link>
-        
-        <div className="glass rounded-3xl p-10 border border-white/20 shadow-2xl relative overflow-hidden bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl">
-          <h1 className="text-3xl font-bold text-zinc-900 dark:text-white mb-4">Lupa Password / Restore Akun</h1>
-          <p className="text-zinc-600 dark:text-zinc-400">
-            Halaman ini sedang dalam tahap pengembangan. Ini adalah placeholder untuk route SaaS Anda.
+    <main className="min-h-screen bg-black relative overflow-hidden flex items-center justify-center px-6 py-10">
+
+      {/* BACKGROUND */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-900/30 via-black to-purple-900/30"></div>
+
+      <div className="absolute w-[500px] h-[500px] bg-blue-600/20 blur-[120px] rounded-full top-[-100px] left-[-100px]" />
+
+      <div className="absolute w-[500px] h-[500px] bg-purple-600/20 blur-[120px] rounded-full bottom-[-100px] right-[-100px]" />
+
+      {/* CARD */}
+      <div className="relative z-10 w-full max-w-5xl bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl grid grid-cols-1 lg:grid-cols-2">
+
+        {/* LEFT */}
+        <div className="p-12 flex flex-col justify-between bg-gradient-to-br from-blue-950/80 to-black">
+
+          <div>
+            <h1 className="text-4xl font-bold text-white">
+              KIRA
+            </h1>
+
+            <p className="text-gray-400 mt-2">
+              Intelligent Asset Management
+            </p>
+          </div>
+
+          <div className="mt-16">
+            <h2 className="text-5xl font-bold leading-tight text-white">
+              Reset your password securely.
+            </h2>
+
+            <p className="text-gray-400 mt-6 text-lg leading-relaxed">
+              Don&apos;t worry. Enter your email and we&apos;ll send you a link to reset your password safely.
+            </p>
+          </div>
+
+          {/* DOT */}
+          <div className="flex gap-3 mt-10">
+            <div className="w-10 h-3 rounded-full bg-white"></div>
+            <div className="w-3 h-3 rounded-full bg-gray-600"></div>
+            <div className="w-3 h-3 rounded-full bg-gray-600"></div>
+          </div>
+        </div>
+
+        {/* RIGHT */}
+        <div className="p-12 flex flex-col justify-center bg-black/30">
+
+          <div>
+            <h2 className="text-4xl font-bold text-white">
+              Forgot Password 
+            </h2>
+
+            <p className="text-gray-400 mt-3">
+              Enter your email to receive reset instructions
+            </p>
+          </div>
+
+          {/* FORM */}
+          <form className="mt-10 space-y-5">
+
+            <div>
+              <label className="text-sm font-medium text-gray-300">
+                Email Address
+              </label>
+
+              <input
+                type="email"
+                placeholder="Enter your email"
+                className="w-full mt-2 bg-white/10 border border-white/10 text-white rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-blue-600 hover:bg-blue-700 transition text-white py-3 rounded-xl font-semibold shadow-lg shadow-blue-600/30"
+            >
+              Send Reset Link
+            </button>
+          </form>
+
+          {/* FOOTER */}
+          <p className="text-sm text-gray-400 mt-8 text-center">
+            Remember your password?{' '}
+
+            <Link
+              href="/auth/login"
+              className="text-blue-400 hover:text-blue-500 font-medium"
+            >
+              Back to Login
+            </Link>
           </p>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
