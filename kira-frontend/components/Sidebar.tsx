@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import {
   LayoutDashboard,
   Boxes,
@@ -15,35 +17,43 @@ const menus = [
   {
     name: 'Dashboard',
     icon: LayoutDashboard,
+    href: '/dashboard',
     active: true,
   },
   {
     name: 'Assets',
     icon: Boxes,
+    href: '/assets',
   },
   {
     name: 'Maintenance',
     icon: Wrench,
+    href: '/maintenance',
   },
   {
     name: 'Users',
     icon: Users,
+    href: '/users',
   },
   {
     name: 'Alerts',
     icon: Bell,
+    href: '/alerts',
   },
   {
     name: 'Reports',
     icon: FileText,
+    href: '/reports',
   },
   {
     name: 'Activity Logs',
     icon: History,
+    href: '/activity-logs',
   },
   {
     name: 'Settings',
     icon: Settings,
+    href: '/settings',
   },
 ];
 
@@ -65,7 +75,8 @@ export default function Sidebar() {
           const Icon = menu.icon;
 
           return (
-            <button
+            <Link
+              href={menu.href}
               key={menu.name}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 text-left hover:bg-white/10 ${
                 menu.active
@@ -78,7 +89,7 @@ export default function Sidebar() {
               <span className="font-medium">
                 {menu.name}
               </span>
-            </button>
+            </Link>
           );
         })}
       </nav>
