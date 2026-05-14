@@ -6,25 +6,52 @@ import { Activity, AlertTriangle, CheckCircle2, ChevronRight, Cpu, Clock, Wrench
 export default function MaintenanceSimulator() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<{ rul: number; severity: string; confidence: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [formData, setFormData] = useState({
+    merek: '',
+    kategori: '',
+    sub_kategori: '',
+    tipe: '',
+    tingkat_kekritisan: ''
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setResult(null);
+    setError(null);
 
-    // Simulate AI processing time
-    setTimeout(() => {
-      setIsSubmitting(false);
-      // Mock result based on random logic or fixed for demo
-      setResult({
-        rul: Math.floor(Math.random() * 60) + 10, // 10 to 70 days
-        severity: Math.random() > 0.5 ? "High" : "Medium",
-        confidence: Math.floor(Math.random() * 15) + 80, // 80 to 95%
+    try {
+      const response = await fetch('http://localhost:5000/api/predict-rul', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
       });
-    }, 2500);
+      
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.details || errData.error || 'Terjadi kesalahan saat memprediksi');
+      }
+
+      const data = await response.json();
+      
+      setResult({
+        rul: Math.round(data.predicted_rul),
+        severity: data.predicted_rul < 10 ? "High" : data.predicted_rul < 30 ? "Medium" : "Low",
+        confidence: 92, // Mock confidence
+      });
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const resetForm = () => setResult(null);
+  const resetForm = () => {
+    setResult(null);
+    setError(null);
+  };
 
   return (
     <div className="w-full max-w-2xl mx-auto mt-12 animate-slide-up" style={{ animationDelay: "0.2s" }}>
@@ -45,25 +72,40 @@ export default function MaintenanceSimulator() {
 
           {!result && !isSubmitting ? (
             <form onSubmit={handleSubmit} className="space-y-5 animate-fade-in">
+              {error && (
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-600 text-sm">
+                  {error}
+                </div>
+              )}
+              
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Asset ID</label>
-                  <input required type="text" placeholder="e.g. PUMP-042" className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
+                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Merek</label>
+                  <input required value={formData.merek} onChange={e => setFormData({...formData, merek: e.target.value})} type="text" placeholder="e.g. Sharp" className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Component</label>
-                  <select className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all">
-                    <option>Bearing</option>
-                    <option>Motor</option>
-                    <option>Valve</option>
-                    <option>Cooling System</option>
-                  </select>
+                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Kategori</label>
+                  <input required value={formData.kategori} onChange={e => setFormData({...formData, kategori: e.target.value})} type="text" placeholder="e.g. Mechanical" className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Sub Kategori</label>
+                  <input required value={formData.sub_kategori} onChange={e => setFormData({...formData, sub_kategori: e.target.value})} type="text" placeholder="e.g. Tata Udara" className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Tipe</label>
+                  <input required value={formData.tipe} onChange={e => setFormData({...formData, tipe: e.target.value})} type="text" placeholder="e.g. Generator Portable" className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Observed Symptoms / Cause</label>
-                <textarea required rows={3} placeholder="Describe the issue... (e.g., High vibration detected on the main bearing, unusual noise during startup)" className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all resize-none"></textarea>
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Tingkat Kekritisan</label>
+                <select required value={formData.tingkat_kekritisan} onChange={e => setFormData({...formData, tingkat_kekritisan: e.target.value})} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all">
+                  <option value="">Pilih tingkat kekritisan...</option>
+                  <option value="Critical">Critical</option>
+                  <option value="High">High</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Low">Low</option>
+                </select>
               </div>
 
               <button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium py-3 rounded-lg flex items-center justify-center gap-2 transition-all transform hover:scale-[1.02] active:scale-95">
