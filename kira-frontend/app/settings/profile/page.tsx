@@ -1,26 +1,95 @@
-'use client';
-import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import Sidebar from '@/components/Sidebar';
+import Topbar from '@/components/Topbar';
 
-export default function Page() {
+export default function ProfileSettingsPage() {
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-[#050505] py-20 px-6 relative">
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-[400px] opacity-20 pointer-events-none">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 blur-[100px] rounded-full mix-blend-multiply dark:mix-blend-screen"></div>
-      </div>
-      
-      <div className="max-w-4xl mx-auto relative z-10">
-        <Link href="/" className="inline-flex items-center text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-white mb-8 transition-colors">
-          <ArrowLeft className="w-4 h-4 mr-2" /> Kembali ke Beranda
-        </Link>
-        
-        <div className="glass rounded-3xl p-10 border border-white/20 shadow-2xl relative overflow-hidden bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl">
-          <h1 className="text-3xl font-bold text-zinc-900 dark:text-white mb-4">Profil Pengguna</h1>
-          <p className="text-zinc-600 dark:text-zinc-400">
-            Halaman ini sedang dalam tahap pengembangan. Ini adalah placeholder untuk route SaaS Anda.
+    <main className="flex min-h-screen bg-gray-100">
+      <Sidebar />
+
+      <div className="flex-1 ml-64 p-8">
+        <Topbar />
+
+        {/* HEADER */}
+        <div className="mt-8">
+          <h1 className="text-4xl font-bold text-gray-900">
+            Profile Settings
+          </h1>
+
+          <p className="text-gray-500 mt-2">
+            Update your profile information
           </p>
         </div>
+
+        {/* FORM */}
+        <div className="bg-white rounded-2xl p-8 shadow-sm mt-8">
+
+          <div className="flex items-center gap-6 mb-10">
+
+            <div className="w-24 h-24 rounded-full bg-blue-100 flex items-center justify-center text-4xl">
+              👤
+            </div>
+
+            <button className="bg-blue-600 hover:bg-blue-700 transition text-white px-5 py-3 rounded-xl font-medium">
+              Upload Photo
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                Full Name
+              </label>
+
+              <input
+                type="text"
+                placeholder="Enter your full name"
+                className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                Email
+              </label>
+
+              <input
+                type="email"
+                placeholder="Enter your email"
+                className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                Phone Number
+              </label>
+
+              <input
+                type="text"
+                placeholder="Enter your phone number"
+                className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                Department
+              </label>
+
+              <input
+                type="text"
+                placeholder="Enter department"
+                className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <button className="mt-8 bg-blue-600 hover:bg-blue-700 transition text-white px-6 py-3 rounded-xl font-medium">
+            Save Changes
+          </button>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

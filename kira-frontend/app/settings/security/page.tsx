@@ -1,26 +1,72 @@
-'use client';
-import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import Sidebar from '@/components/Sidebar';
+import Topbar from '@/components/Topbar';
 
-export default function Page() {
+export default function SecuritySettingsPage() {
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-[#050505] py-20 px-6 relative">
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-[400px] opacity-20 pointer-events-none">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 blur-[100px] rounded-full mix-blend-multiply dark:mix-blend-screen"></div>
-      </div>
-      
-      <div className="max-w-4xl mx-auto relative z-10">
-        <Link href="/" className="inline-flex items-center text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-white mb-8 transition-colors">
-          <ArrowLeft className="w-4 h-4 mr-2" /> Kembali ke Beranda
-        </Link>
-        
-        <div className="glass rounded-3xl p-10 border border-white/20 shadow-2xl relative overflow-hidden bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl">
-          <h1 className="text-3xl font-bold text-zinc-900 dark:text-white mb-4">Ganti Password & Keamanan</h1>
-          <p className="text-zinc-600 dark:text-zinc-400">
-            Halaman ini sedang dalam tahap pengembangan. Ini adalah placeholder untuk route SaaS Anda.
+    <main className="flex min-h-screen bg-gray-100">
+      <Sidebar />
+
+      <div className="flex-1 ml-64 p-8">
+        <Topbar />
+
+        {/* HEADER */}
+        <div className="mt-8">
+          <h1 className="text-4xl font-bold text-gray-900">
+            Security Settings
+          </h1>
+
+          <p className="text-gray-500 mt-2">
+            Manage your account password and security
           </p>
         </div>
+
+        {/* FORM */}
+        <div className="bg-white rounded-2xl p-8 shadow-sm mt-8 max-w-3xl">
+
+          <div className="space-y-6">
+
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                Current Password
+              </label>
+
+              <input
+                type="password"
+                placeholder="Enter current password"
+                className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                New Password
+              </label>
+
+              <input
+                type="password"
+                placeholder="Enter new password"
+                className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                Confirm Password
+              </label>
+
+              <input
+                type="password"
+                placeholder="Confirm new password"
+                className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <button className="mt-8 bg-blue-600 hover:bg-blue-700 transition text-white px-6 py-3 rounded-xl font-medium">
+            Update Password
+          </button>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }
