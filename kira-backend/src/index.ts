@@ -85,6 +85,33 @@ app.post('/api/assets', async (req: Request, res: Response) => {
   }
 });
 
+// Endpoint untuk prediksi RUL dengan meneruskan request ke AI Engine (FastAPI)
+app.post('/api/predict-rul', async (req: Request, res: Response) => {
+  try {
+    const aiEngineUrl = process.env.AI_ENGINE_URL || 'http://localhost:8000/predict';
+    
+    // Request body akan diteruskan langsung ke FastAPI karena FastAPI sudah mengatur default value-nya
+    const response = await fetch(aiEngineUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(req.body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`AI Engine responded with status ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+    return res.status(200).json(data);
+  } catch (error) {
+    console.error('Error in predict-rul endpoint:', error);
+    return res.status(500).json({ error: 'Failed to predict RUL', details: (error as Error).message });
+  }
+});
+
 // Endpoint untuk testing API
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK' });

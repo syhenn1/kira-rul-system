@@ -6,7 +6,8 @@
   "scripts": {
     "dev:frontend": "npm run dev --prefix kira-frontend",
     "dev:backend": "npm run dev --prefix kira-backend",
-    "dev": "concurrently -c \"blue,green\" -n \"FRONTEND,BACKEND\" \"npm run dev:frontend\" \"npm run dev:backend\""
+    "dev:ai": "cd kira-ai-engine && .\\venv\\Scripts\\uvicorn app:app --host 0.0.0.0 --port 8000 --reload",
+    "dev": "concurrently -c \"blue,green,magenta\" -n \"FRONTEND,BACKEND,AI_ENGINE\" \"npm run dev:frontend\" \"npm run dev:backend\" \"npm run dev:ai\""
   },
   "repository": {
     "type": "git",
@@ -21,6 +22,7 @@
   },
   "homepage": "https://github.com/syhenn1/kira-rul-system#readme",
   "devDependencies": {
+    "@faker-js/faker": "^10.4.0",
     "concurrently": "^9.2.1"
   },
   "dependencies": {
