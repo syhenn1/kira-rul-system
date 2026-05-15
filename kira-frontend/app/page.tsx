@@ -14,16 +14,28 @@ export default function Home() {
             <span className="font-bold text-xl tracking-tight text-zinc-900 dark:text-white">Kira RUL System</span>
           </div>
           <div className="flex items-center gap-6">
-            <button className="text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors">
-              Documentation
-            </button>
-            <a href="/auth/login" className="text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors">
-              Login
-            </a>
-            <a href="/dashboard" className="text-sm font-medium px-4 py-2 rounded-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:scale-105 transition-transform">
-              Dashboard
-            </a>
-          </div>
+
+  <a
+    href="/teams"
+    className="text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors"
+  >
+    Team
+  </a>
+
+  <a
+    href="/auth/login"
+    className="text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors"
+  >
+    Login
+  </a>
+
+  <a
+    href="/dashboard"
+    className="text-sm font-medium px-4 py-2 rounded-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:scale-105 transition-transform"
+  >
+    Dashboard
+  </a>
+</div>
         </div>
       </nav>
 
@@ -90,6 +102,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+
 
       {/* Simulator Section */}
       <section id="simulator" className="py-24 px-6 relative">
