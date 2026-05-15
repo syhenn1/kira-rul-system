@@ -34,6 +34,14 @@ export default function RegisterPage() {
   return (
     <main className="min-h-screen bg-black relative overflow-hidden flex items-center justify-center px-6 py-10">
 
+      <Link
+  href="/"
+  className="absolute top-6 left-6 z-20 flex items-center gap-2 text-white/80 hover:text-white transition bg-white/10 px-4 py-2 rounded-xl backdrop-blur-md border border-white/10"
+>
+  ← Back to Home
+</Link>
+
+
       {/* BACKGROUND */}
       <div className="absolute inset-0 bg-gradient-to-br from-blue-900/30 via-black to-purple-900/30"></div>
 

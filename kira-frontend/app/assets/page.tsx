@@ -1,222 +1,317 @@
-import Link from 'next/link';
-import Sidebar from '@/components/Sidebar';
-import Topbar from '@/components/Topbar';
+'use client';
 
-export default function AddAssetPage() {
+import Link from 'next/link';
+import { useState } from 'react';
+
+import Sidebar from '@/components/Sidebar';
+
+const assets = [
+  {
+    id: 'AST-0001',
+    name: 'Laptop Dell XPS 13',
+    category: 'Laptop',
+    condition: 'In Use',
+    location: 'IT Room',
+    lastAction: '16 May, 2024',
+  },
+
+  {
+    id: 'AST-0002',
+    name: 'Monitor LG 24MD43',
+    category: 'Monitor',
+    condition: 'Available',
+    location: 'Bricks Eatery',
+    lastAction: '15 May, 2024',
+  },
+
+  {
+    id: 'AST-0003',
+    name: 'Chair Ergonomic X200',
+    category: 'Furniture',
+    condition: 'In Use',
+    location: 'Marketing Room',
+    lastAction: '14 May, 2024',
+  },
+
+  {
+    id: 'AST-0004',
+    name: 'Projector Epson X200',
+    category: 'Projector',
+    condition: 'Maintenance',
+    location: 'Meeting Room',
+    lastAction: '13 May, 2024',
+  },
+
+  {
+    id: 'AST-0005',
+    name: 'Printer Canon E3200',
+    category: 'Printer',
+    condition: 'Available',
+    location: 'Finance Room',
+    lastAction: '12 May, 2024',
+  },
+];
+
+export default function AssetsPage() {
+  const [search, setSearch] =
+    useState('');
+
+  const filteredAssets =
+    assets.filter((asset) =>
+      asset.name
+        .toLowerCase()
+        .includes(search.toLowerCase())
+    );
+
   return (
-    <main className="flex min-h-screen bg-gray-100">
+    <>
       <Sidebar />
 
-      <div className="flex-1 ml-64 p-8">
-        <Topbar />
+      <main className="min-h-screen bg-[#F5F7FB] ml-64 p-8">
 
         {/* HEADER */}
-        <div className="flex items-center gap-4 mt-8">
-
-          <Link
-            href="/assets"
-            className="w-12 h-12 rounded-xl bg-white shadow-sm flex items-center justify-center hover:bg-gray-50 transition"
-          >
-            ←
-          </Link>
+        <div className="flex items-center justify-between mb-8">
 
           <div>
-            <h1 className="text-4xl font-bold text-gray-900">
-              Add New Asset
+            <h1 className="text-5xl font-bold text-[#111827]">
+              Assets
             </h1>
 
-            <p className="text-gray-500 mt-2">
-              Create and manage a new company asset
+            <p className="text-gray-500 mt-3 text-lg">
+              Manage and monitor all company assets
             </p>
+          </div>
+
+          {/* ADD BUTTON */}
+          <Link
+            href="/assets/add"
+            className="bg-blue-600 hover:bg-blue-700 transition text-white px-6 py-4 rounded-2xl font-semibold shadow-lg shadow-blue-600/20"
+          >
+            + Add Asset
+          </Link>
+        </div>
+
+        {/* STATS */}
+        <div className="grid grid-cols-4 gap-6 mb-8">
+
+          <StatCard
+            title="Total Assets"
+            value="2,500"
+          />
+
+          <StatCard
+            title="In Use"
+            value="936"
+          />
+
+          <StatCard
+            title="Available"
+            value="800"
+          />
+
+          <StatCard
+            title="Maintenance"
+            value="120"
+          />
+        </div>
+
+        {/* SEARCH */}
+        <div className="bg-white rounded-3xl border shadow-sm p-6 mb-8">
+
+          <div className="flex gap-4">
+
+            <input
+              type="text"
+              placeholder="Search assets..."
+              value={search}
+              onChange={(e) =>
+                setSearch(e.target.value)
+              }
+              className="flex-1 border rounded-2xl px-5 py-4 outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder:text-gray-400"
+            />
+
+            <select className="border rounded-2xl px-5 py-4 text-gray-500">
+
+              <option>
+                All Status
+              </option>
+
+              <option>
+                Available
+              </option>
+
+              <option>
+                In Use
+              </option>
+
+              <option>
+                Maintenance
+              </option>
+            </select>
           </div>
         </div>
 
-        {/* FORM */}
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 mt-8">
+        {/* TABLE */}
+        <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
 
-          {/* LEFT */}
-          <div className="xl:col-span-3 bg-white rounded-2xl p-8 shadow-sm">
+          <div className="overflow-x-auto">
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <table className="w-full">
 
-              {/* Asset Name */}
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Asset Name
-                </label>
+              <thead className="border-b bg-gray-50">
 
-                <input
-                  type="text"
-                  placeholder="Enter asset name"
-                  className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+                <tr className="text-left text-sm text-gray-500">
 
-              {/* Purchase Date */}
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Purchase Date
-                </label>
+                  <th className="px-6 py-5">
+                    Asset Name
+                  </th>
 
-                <input
-                  type="date"
-                  className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+                  <th className="px-6 py-5">
+                    Asset ID
+                  </th>
 
-              {/* Category */}
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Category
-                </label>
+                  <th className="px-6 py-5">
+                    Category
+                  </th>
 
-                <input
-                  type="text"
-                  placeholder="Enter category"
-                  className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+                  <th className="px-6 py-5">
+                    Condition
+                  </th>
 
-              {/* Location */}
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Location
-                </label>
+                  <th className="px-6 py-5">
+                    Location
+                  </th>
 
-                <select className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 text-gray-600 outline-none focus:ring-2 focus:ring-blue-500">
-                  <option>Select location</option>
-                  <option>Gedung A</option>
-                  <option>Gedung B</option>
-                  <option>Gedung C</option>
-                </select>
-              </div>
+                  <th className="px-6 py-5">
+                    Last Action
+                  </th>
 
-              {/* Brand */}
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Brand
-                </label>
+                  <th className="px-6 py-5">
+                    Action
+                  </th>
+                </tr>
+              </thead>
 
-                <select className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 text-gray-600 outline-none focus:ring-2 focus:ring-blue-500">
-                  <option>Select brand</option>
-                  <option>Dell</option>
-                  <option>HP</option>
-                  <option>Canon</option>
-                  <option>Apple</option>
-                </select>
-              </div>
+              <tbody>
 
-              {/* Custodian */}
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Custodian
-                </label>
+                {filteredAssets.map(
+                  (asset) => (
+                    <tr
+                      key={asset.id}
+                      className="border-b hover:bg-gray-50 transition"
+                    >
 
-                <select className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 text-gray-600 outline-none focus:ring-2 focus:ring-blue-500">
-                  <option>Select custodian</option>
-                  <option>IT Department</option>
-                  <option>Finance</option>
-                  <option>Marketing</option>
-                </select>
-              </div>
+                      <td className="px-6 py-5 font-semibold text-[#111827]">
 
-              {/* Model */}
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Model
-                </label>
+                        <Link
+                          href={`/assets/${asset.id}`}
+                          className="hover:text-blue-600"
+                        >
+                          {asset.name}
+                        </Link>
+                      </td>
 
-                <input
-                  type="text"
-                  placeholder="Enter model"
-                  className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+                      <td className="px-6 py-5 text-gray-500">
+                        {asset.id}
+                      </td>
 
-              {/* Condition */}
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Condition
-                </label>
+                      <td className="px-6 py-5 text-gray-600">
+                        {asset.category}
+                      </td>
 
-                <select className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 text-gray-600 outline-none focus:ring-2 focus:ring-blue-500">
-                  <option>Select condition</option>
-                  <option>Available</option>
-                  <option>In Use</option>
-                  <option>Maintenance</option>
-                </select>
-              </div>
+                      <td className="px-6 py-5">
 
-              {/* Serial Number */}
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Serial Number
-                </label>
+                        <span
+                          className={`px-3 py-1 rounded-full text-sm font-medium ${
+                            asset.condition ===
+                            'Available'
+                              ? 'bg-green-100 text-green-700'
+                              : asset.condition ===
+                                'Maintenance'
+                              ? 'bg-orange-100 text-orange-700'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}
+                        >
+                          {asset.condition}
+                        </span>
+                      </td>
 
-                <input
-                  type="text"
-                  placeholder="Enter serial number"
-                  className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+                      <td className="px-6 py-5 text-gray-600">
+                        {asset.location}
+                      </td>
 
-              {/* Description */}
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Description
-                </label>
+                      <td className="px-6 py-5 text-gray-500">
+                        {asset.lastAction}
+                      </td>
 
-                <input
-                  type="text"
-                  placeholder="Enter description"
-                  className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
+                      <td className="px-6 py-5">
+
+                        <div className="flex gap-3">
+
+                          <Link
+                            href={`/assets/${asset.id}`}
+                            className="text-blue-600 hover:text-blue-700 font-medium"
+                          >
+                            View
+                          </Link>
+
+                          <button className="text-red-500 hover:text-red-600 font-medium">
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
           </div>
 
-          {/* RIGHT */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+          {/* FOOTER */}
+          <div className="flex items-center justify-between px-6 py-5">
 
-            <div>
-              <h2 className="text-xl font-semibold text-gray-800">
-                Upload Image
-              </h2>
+            <p className="text-gray-500 text-sm">
+              Showing 1-5 of 100 assets
+            </p>
 
-              {/* UPLOAD */}
-              <div className="border-2 border-dashed border-gray-300 rounded-2xl h-[400px] mt-6 flex flex-col items-center justify-center text-center px-6">
+            <div className="flex gap-3">
 
-                <div className="w-20 h-20 rounded-2xl bg-blue-100 flex items-center justify-center text-4xl text-blue-600">
-                  ↑
-                </div>
+              <button className="w-10 h-10 rounded-xl bg-blue-600 text-white">
+                1
+              </button>
 
-                <p className="mt-6 font-medium text-gray-700">
-                  Click to upload
-                </p>
+              <button className="w-10 h-10 rounded-xl border">
+                2
+              </button>
 
-                <p className="text-sm text-gray-400 mt-2">
-                  or drag and drop
-                </p>
-              </div>
-            </div>
-
-            {/* BUTTON */}
-            <div className="flex gap-4 mt-6">
-
-              <Link
-                href="/assets"
-                className="flex-1 border border-blue-600 text-blue-600 hover:bg-blue-50 transition py-3 rounded-xl font-medium text-center"
-              >
-                Cancel
-              </Link>
-
-              <button className="flex-1 bg-blue-600 hover:bg-blue-700 transition text-white py-3 rounded-xl font-medium">
-                Save
+              <button className="w-10 h-10 rounded-xl border">
+                3
               </button>
             </div>
           </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </>
+  );
+}
+
+function StatCard({
+  title,
+  value,
+}: {
+  title: string;
+  value: string;
+}) {
+  return (
+    <div className="bg-white rounded-3xl border shadow-sm p-6">
+
+      <p className="text-gray-500 text-sm">
+        {title}
+      </p>
+
+      <h2 className="text-4xl font-bold text-[#111827] mt-3">
+        {value}
+      </h2>
+    </div>
   );
 }

@@ -1,234 +1,421 @@
+'use client';
+
+import Link from 'next/link';
+import { useState } from 'react';
+
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
 
-export default function AssetsPage() {
-  const assets = [
-    {
-      name: 'Laptop Dell XPS 13',
-      id: 'AST-0001',
-      category: 'Laptop',
-      condition: 'In Use',
-      location: 'IT Room',
-      action: '16 May, 2026',
-    },
-    {
-      name: 'Monitor LG 24MD43',
-      id: 'AST-0002',
-      category: 'Monitor',
-      condition: 'Available',
-      location: 'Meeting Room',
-      action: '18 May, 2026',
-    },
-    {
-      name: 'Projector Epson X200',
-      id: 'AST-0003',
-      category: 'Projector',
-      condition: 'Maintenance',
-      location: 'Finance Room',
-      action: '20 May, 2026',
-    },
-    {
-      name: 'Printer Canon G1030',
-      id: 'AST-0004',
-      category: 'Printer',
-      condition: 'Available',
-      location: 'IT Room',
-      action: '22 May, 2026',
-    },
-  ];
+export default function AssetDetailPage() {
 
-  const getBadge = (condition: string) => {
-    if (condition === 'Available') {
-      return 'bg-green-100 text-green-700';
-    }
-
-    if (condition === 'Maintenance') {
-      return 'bg-orange-100 text-orange-700';
-    }
-
-    return 'bg-blue-100 text-blue-700';
-  };
+  const [activeTab, setActiveTab] =
+    useState('overview');
 
   return (
-    <main className="flex min-h-screen bg-gray-100">
+    <main className="flex min-h-screen bg-[#F5F7FB]">
+
       <Sidebar />
 
       <div className="flex-1 ml-64 p-8">
+
         <Topbar />
 
         {/* HEADER */}
-        <div className="mt-8">
-          <h1 className="text-4xl font-bold text-gray-900">
-            Assets
-          </h1>
+        <div className="flex items-center justify-between mt-8">
 
-          <p className="text-gray-500 mt-2">
-            Manage and monitor all company assets
-          </p>
-        </div>
+          <div className="flex items-center gap-4">
 
-        {/* FILTER */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm mt-8">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <input
-              type="text"
-              placeholder="Search assets..."
-              className="flex-1 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <Link
+              href="/assets"
+              className="w-12 h-12 rounded-2xl bg-white border shadow-sm flex items-center justify-center hover:bg-gray-50 transition text-xl"
+            >
+              ←
+            </Link>
 
-            <select className="border border-gray-200 rounded-xl px-4 py-3 text-gray-600">
-              <option>All Status</option>
-            </select>
+            <div>
+              <h1 className="text-5xl font-bold text-[#111827]">
+                Asset Detail
+              </h1>
 
-            <select className="border border-gray-200 rounded-xl px-4 py-3 text-gray-600">
-              <option>All Category</option>
-            </select>
+              <p className="text-gray-500 mt-2">
+                Monitor and manage asset information
+              </p>
+            </div>
+          </div>
 
-            <button className="bg-blue-600 hover:bg-blue-700 transition text-white px-6 py-3 rounded-xl font-medium">
-              Add Asset
+          {/* ACTION */}
+          <div className="flex gap-4">
+
+            <Link
+              href="/assets/edit/AST-0001"
+              className="px-6 py-3 rounded-2xl border bg-white hover:bg-gray-50 transition font-medium"
+            >
+              Edit
+            </Link>
+
+            <button
+              onClick={() =>
+                alert(
+                  'Asset checked out successfully!'
+                )
+              }
+              className="px-6 py-3 rounded-2xl border bg-white hover:bg-gray-50 transition font-medium"
+            >
+              Check Out
+            </button>
+
+            <button
+              onClick={() =>
+                alert(
+                  'Asset deleted!'
+                )
+              }
+              className="px-6 py-3 rounded-2xl bg-red-500 hover:bg-red-600 transition text-white font-medium"
+            >
+              Delete
             </button>
           </div>
         </div>
 
-        {/* CONTENT */}
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 mt-6">
-          {/* COMPANY LIST */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm">
-            <h2 className="text-xl font-semibold text-gray-800 mb-6">
-              Companies
-            </h2>
+        {/* TOP */}
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 mt-8">
 
-            <div className="space-y-6">
-              <div>
-                <h3 className="font-semibold text-gray-700">
-                  Company A
-                </h3>
+          {/* LEFT */}
+          <div className="xl:col-span-3 bg-white rounded-3xl border shadow-sm p-8">
 
-                <div className="mt-3 space-y-2 text-gray-500 text-sm">
-                  <p>IT Department</p>
-                  <p>Finance Department</p>
-                  <p>HR Department</p>
+            <div className="flex flex-col lg:flex-row gap-8">
+
+              {/* IMAGE */}
+              <img
+                src="https://images.unsplash.com/photo-1496181133206-80ce9b88a853?q=80&w=1200&auto=format&fit=crop"
+                alt="asset"
+                className="w-full lg:w-[280px] h-[280px] object-cover rounded-3xl"
+              />
+
+              {/* INFO */}
+              <div className="flex-1">
+
+                <div className="flex items-center gap-4 flex-wrap">
+
+                  <h2 className="text-4xl font-bold text-[#111827]">
+                    Laptop Dell XPS 13
+                  </h2>
+
+                  <span className="px-4 py-2 rounded-full bg-green-100 text-green-700 font-medium">
+                    In Use
+                  </span>
                 </div>
-              </div>
 
-              <div>
-                <h3 className="font-semibold text-gray-700">
-                  Company B
-                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6 mt-10">
 
-                <div className="mt-3 space-y-2 text-gray-500 text-sm">
-                  <p>Marketing</p>
-                  <p>Sales</p>
-                </div>
-              </div>
+                  <Info
+                    title="Asset Number"
+                    value="AST-0001"
+                  />
 
-              <div>
-                <h3 className="font-semibold text-gray-700">
-                  Company C
-                </h3>
+                  <Info
+                    title="Category"
+                    value="Laptop"
+                  />
 
-                <div className="mt-3 space-y-2 text-gray-500 text-sm">
-                  <p>Production</p>
-                  <p>Warehouse</p>
+                  <Info
+                    title="Brand"
+                    value="Dell"
+                  />
+
+                  <Info
+                    title="Model"
+                    value="XPS 13"
+                  />
+
+                  <Info
+                    title="Serial Number"
+                    value="DLPX13-78291"
+                  />
+
+                  <Info
+                    title="Purchase Date"
+                    value="12 Jan 2023"
+                  />
+
+                  <Info
+                    title="Location"
+                    value="IT Room"
+                  />
+
+                  <Info
+                    title="Description"
+                    value="Laptop for software development"
+                  />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* TABLE */}
-          <div className="xl:col-span-3 bg-white rounded-2xl p-6 shadow-sm overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-100 text-left text-sm text-gray-400">
-                  <th className="pb-4 font-medium">
-                    Asset Name
-                  </th>
+          {/* STATUS */}
+          <div className="bg-white rounded-3xl border shadow-sm p-8">
 
-                  <th className="pb-4 font-medium">
-                    Asset ID
-                  </th>
+            <h2 className="text-2xl font-bold text-[#111827]">
+              Status Information
+            </h2>
 
-                  <th className="pb-4 font-medium">
-                    Category
-                  </th>
+            <div className="space-y-8 mt-10">
 
-                  <th className="pb-4 font-medium">
-                    Condition
-                  </th>
+              <Info
+                title="Custodian"
+                value="Yasmeen A."
+              />
 
-                  <th className="pb-4 font-medium">
-                    Location
-                  </th>
+              <Info
+                title="Assigned Date"
+                value="10 Feb 2024"
+              />
 
-                  <th className="pb-4 font-medium">
-                    Last Action
-                  </th>
-                </tr>
-              </thead>
+              <Info
+                title="Last Check Out"
+                value="18 May 2024"
+              />
 
-              <tbody>
-                {assets.map((asset, index) => (
-                  <tr
-                    key={index}
-                    className="border-b border-gray-50 hover:bg-gray-50 transition"
-                  >
-                    <td className="py-5 font-medium text-gray-800">
-                      {asset.name}
-                    </td>
+              <div>
+                <p className="text-sm text-gray-400">
+                  Condition
+                </p>
 
-                    <td className="text-gray-500">
-                      {asset.id}
-                    </td>
-
-                    <td className="text-gray-500">
-                      {asset.category}
-                    </td>
-
-                    <td>
-                      <span
-                        className={`px-3 py-1 rounded-full text-sm font-medium ${getBadge(
-                          asset.condition
-                        )}`}
-                      >
-                        {asset.condition}
-                      </span>
-                    </td>
-
-                    <td className="text-gray-500">
-                      {asset.location}
-                    </td>
-
-                    <td className="text-gray-500">
-                      {asset.action}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* PAGINATION */}
-            <div className="flex items-center justify-between mt-6">
-              <p className="text-sm text-gray-500">
-                Showing 1-4 of 100 assets
-              </p>
-
-              <div className="flex gap-2">
-                <button className="w-9 h-9 rounded-lg border border-gray-200 text-gray-500">
-                  1
-                </button>
-
-                <button className="w-9 h-9 rounded-lg bg-blue-600 text-white">
-                  2
-                </button>
-
-                <button className="w-9 h-9 rounded-lg border border-gray-200 text-gray-500">
-                  3
-                </button>
+                <p className="mt-2 text-green-600 font-semibold">
+                  Good
+                </p>
               </div>
             </div>
           </div>
         </div>
+
+        {/* BOTTOM */}
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 mt-6">
+
+          {/* LEFT */}
+          <div className="xl:col-span-3 bg-white rounded-3xl border shadow-sm p-8">
+
+            {/* TAB */}
+            <div className="flex gap-8 border-b overflow-x-auto">
+
+              <TabButton
+                title="Overview"
+                active={
+                  activeTab === 'overview'
+                }
+                onClick={() =>
+                  setActiveTab(
+                    'overview'
+                  )
+                }
+              />
+
+              <TabButton
+                title="Maintenance History"
+                active={
+                  activeTab ===
+                  'maintenance'
+                }
+                onClick={() =>
+                  setActiveTab(
+                    'maintenance'
+                  )
+                }
+              />
+
+              <TabButton
+                title="Usage History"
+                active={
+                  activeTab ===
+                  'usage'
+                }
+                onClick={() =>
+                  setActiveTab('usage')
+                }
+              />
+
+              <TabButton
+                title="Notes"
+                active={
+                  activeTab === 'notes'
+                }
+                onClick={() =>
+                  setActiveTab('notes')
+                }
+              />
+            </div>
+
+            {/* CONTENT */}
+            <div className="mt-10">
+
+              {activeTab ===
+                'overview' && (
+                <>
+                  <h3 className="text-2xl font-bold text-[#111827]">
+                    Specifications
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
+
+                    <Info
+                      title="Processor"
+                      value="Intel Core i7 1165G7"
+                    />
+
+                    <Info
+                      title="RAM"
+                      value="16GB"
+                    />
+
+                    <Info
+                      title="Storage"
+                      value="512GB SSD"
+                    />
+
+                    <Info
+                      title="OS"
+                      value="Windows 11 Pro"
+                    />
+                  </div>
+                </>
+              )}
+
+              {activeTab ===
+                'maintenance' && (
+                <div className="space-y-6">
+
+                  <HistoryCard
+                    title="Battery Replacement"
+                    date="12 May 2024"
+                    status="Completed"
+                  />
+
+                  <HistoryCard
+                    title="Screen Inspection"
+                    date="03 Apr 2024"
+                    status="Completed"
+                  />
+                </div>
+              )}
+
+              {activeTab ===
+                'usage' && (
+                <div className="space-y-6">
+
+                  <HistoryCard
+                    title="Checked Out by Yasmeen"
+                    date="18 May 2024"
+                    status="In Use"
+                  />
+
+                  <HistoryCard
+                    title="Returned by IT Team"
+                    date="15 May 2024"
+                    status="Returned"
+                  />
+                </div>
+              )}
+
+              {activeTab ===
+                'notes' && (
+                <div className="bg-gray-50 rounded-2xl p-6 text-gray-600 leading-relaxed">
+                  This asset is mainly used for software engineering and AI development projects.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* QR */}
+          <div className="bg-white rounded-3xl border shadow-sm p-8 flex flex-col items-center justify-center">
+
+            <h2 className="text-2xl font-bold text-[#111827]">
+              QR Code
+            </h2>
+
+            <img
+              src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=AST-0001"
+              alt="qr"
+              className="w-[220px] mt-8"
+            />
+
+            <p className="text-gray-500 mt-4">
+              AST-0001
+            </p>
+          </div>
+        </div>
       </div>
     </main>
+  );
+}
+
+function Info({
+  title,
+  value,
+}: {
+  title: string;
+  value: string;
+}) {
+  return (
+    <div>
+      <p className="text-sm text-gray-400">
+        {title}
+      </p>
+
+      <p className="font-semibold text-[#111827] mt-2">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function TabButton({
+  title,
+  active,
+  onClick,
+}: {
+  title: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`pb-4 whitespace-nowrap transition font-medium ${
+        active
+          ? 'text-blue-600 border-b-2 border-blue-600'
+          : 'text-gray-400 hover:text-black'
+      }`}
+    >
+      {title}
+    </button>
+  );
+}
+
+function HistoryCard({
+  title,
+  date,
+  status,
+}: {
+  title: string;
+  date: string;
+  status: string;
+}) {
+  return (
+    <div className="border rounded-2xl p-5 flex items-center justify-between">
+
+      <div>
+        <h4 className="font-semibold text-[#111827]">
+          {title}
+        </h4>
+
+        <p className="text-gray-400 text-sm mt-1">
+          {date}
+        </p>
+      </div>
+
+      <span className="px-4 py-2 rounded-full bg-blue-100 text-blue-600 text-sm font-medium">
+        {status}
+      </span>
+    </div>
   );
 }
