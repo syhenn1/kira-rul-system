@@ -32,7 +32,7 @@ passport.use(
         } else {
           user = await prisma.user.create({
             data: {
-              name: profile.displayName || email.split('@')[0],
+              name: profile.displayName || email.split('@')[0] || email,
               email,
               google_id: profile.id,
             },
