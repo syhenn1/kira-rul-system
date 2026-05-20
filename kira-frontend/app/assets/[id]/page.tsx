@@ -345,6 +345,7 @@ export default function AssetDetailPage() {
             </p>
           </div>
         </div>
+      </div>
       </main>
     </ProtectedRoute>
   );

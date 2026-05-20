@@ -5,7 +5,10 @@ import { useRouter } from 'next/navigation';
 import Swal from 'sweetalert2';
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return !!localStorage.getItem('kira_token');
+  });
   const router = useRouter();
 
   useEffect(() => {
@@ -26,16 +29,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     }
   }, [router]);
 
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Memeriksa autentikasi...</p>
-        </div>
-      </div>
-    );
-  }
+  if (!isAuthenticated) return null;
 
   return <>{children}</>;
 }
