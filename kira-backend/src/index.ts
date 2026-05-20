@@ -10,8 +10,6 @@ import './passport.config';
 import authRoutes from './auth/auth.routes';
 import { authenticateJWT } from './middleware/auth.middleware';
 
-dotenv.config();
-
 const app = express();
 const prisma = new PrismaClient({
   adapter: new PrismaPg(process.env.DATABASE_URL || ''),
@@ -26,7 +24,7 @@ app.use(
 app.use(express.json());
 app.use(passport.initialize());
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3001;
 
 // Auth routes
 app.use('/api/auth', authRoutes);
