@@ -1,12 +1,10 @@
+import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
-import dotenv from 'dotenv';
 import passport from 'passport';
 import './passport.config';
 import authRoutes from './auth/auth.routes';
-
-dotenv.config();
 
 const app = express();
 const prisma = new PrismaClient();
@@ -20,7 +18,7 @@ app.use(
 app.use(express.json());
 app.use(passport.initialize());
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3001;
 
 // Auth routes
 app.use('/api/auth', authRoutes);
