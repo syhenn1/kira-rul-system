@@ -4,6 +4,13 @@ from pydantic import BaseModel, Field
 import pandas as pd
 import numpy as np
 import joblib
+from typing import Optional
+
+# import summarizer module
+try:
+    from summarizer import summarize_company_assets
+except Exception:
+    summarize_company_assets = None
 
 app = FastAPI(title="Kira AI Engine", description="RUL Prediction API")
 
@@ -81,6 +88,12 @@ class AssetInput(BaseModel):
     maximum_biaya_perbaikan: float = Field(default=0.0, description="Biaya perbaikan maksimal historis")
 
 
+class SummarizeRequest(BaseModel):
+    company_id: Optional[str] = None
+    limit: Optional[int] = 10
+    temperature: Optional[float] = 0.2
+
+
 @app.get("/")
 def read_root():
     return {"message": "Kira AI Engine is running. Use /predict to get RUL predictions."}
@@ -126,6 +139,28 @@ def predict_rul(data: AssetInput):
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Prediction error. If this fails, it might mean the model requires a separate preprocessor but it wasn't found in the .joblib file. Error: {str(e)}")
+
+
+@app.post("/summarize")
+def summarize(req: SummarizeRequest):
+    if summarize_company_assets is None:
+        raise HTTPException(status_code=500, detail="Summarizer module not available or failed to import.")
+    try:
+        if req.company_id:
+            summary = summarize_company_assets(req.company_id, limit=req.limit, temperature=req.temperature)
+        else:
+            # call summarizer with its default company id when none provided
+            summary = summarize_company_assets(limit=req.limit, temperature=req.temperature)
+        if isinstance(summary, dict) and "summary" in summary:
+            return {
+                "company_id": req.company_id, 
+                "summary": summary["summary"],
+                "assets": summary.get("assets", [])
+            }
+        else:
+            return {"company_id": req.company_id, "summary": summary}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Summarization error: {e}")
 
 if __name__ == "__main__":
     import uvicorn

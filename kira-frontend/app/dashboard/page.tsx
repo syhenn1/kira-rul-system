@@ -1,6 +1,8 @@
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
 import StatCard from '@/components/StatCard';
+import SummaryCard from '@/components/SummaryCard';
+import WelcomeHeader from '@/components/WelcomeHeader';
 
 import {
   AssetBarChart,
@@ -8,19 +10,23 @@ import {
 } from '@/components/Charts';
 
 import RecentActivities from '@/components/RecentActivities';
+import ProtectedRoute from '@/components/ProtectedRoute';
 
 export default function DashboardPage() {
   return (
-    <main className="flex min-h-screen bg-gray-100">
+    <ProtectedRoute>
+      <main className="flex min-h-screen bg-gray-100">
       <Sidebar />
 
       <div className="flex-1 ml-64 p-8">
         <Topbar />
 
         <div className="mt-8">
-          <h1 className="text-4xl font-bold text-gray-900">
-            Dashboard
-          </h1>
+          <WelcomeHeader />
+        </div>
+
+        <div className="mt-8">
+          <SummaryCard />
         </div>
 
         {/* STAT CARDS */}
@@ -199,5 +205,6 @@ export default function DashboardPage() {
         </div>
       </div>
     </main>
+    </ProtectedRoute>
   );
 }

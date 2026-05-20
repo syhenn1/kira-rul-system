@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
+import ProtectedRoute from '@/components/ProtectedRoute';
 
 export default function AssetDetailPage() {
 
@@ -12,9 +13,10 @@ export default function AssetDetailPage() {
     useState('overview');
 
   return (
-    <main className="flex min-h-screen bg-[#F5F7FB]">
+    <ProtectedRoute>
+      <main className="flex min-h-screen bg-[#F5F7FB]">
 
-      <Sidebar />
+        <Sidebar />
 
       <div className="flex-1 ml-64 p-8">
 
@@ -343,8 +345,8 @@ export default function AssetDetailPage() {
             </p>
           </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </ProtectedRoute>
   );
 }
 
