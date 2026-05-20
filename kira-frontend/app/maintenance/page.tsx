@@ -1,5 +1,7 @@
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
+import Link from 'next/link';
+import ProtectedRoute from '@/components/ProtectedRoute';
 
 export default function MaintenancePage() {
   const maintenances = [
@@ -75,8 +77,9 @@ export default function MaintenancePage() {
   };
 
   return (
-    <main className="flex min-h-screen bg-gray-100">
-      <Sidebar />
+    <ProtectedRoute>
+      <main className="flex min-h-screen bg-gray-100">
+        <Sidebar />
 
       <div className="flex-1 ml-64 p-8">
         <Topbar />
@@ -93,9 +96,12 @@ export default function MaintenancePage() {
             </p>
           </div>
 
-          <button className="bg-blue-600 hover:bg-blue-700 transition text-white px-5 py-3 rounded-xl font-medium">
+          <Link 
+            href="/maintenance/add" 
+            className="bg-blue-600 hover:bg-blue-700 transition text-white px-5 py-3 rounded-xl font-medium"
+          >
             + Schedule
-          </button>
+          </Link>
         </div>
 
         {/* FILTER */}
@@ -235,7 +241,7 @@ export default function MaintenancePage() {
             </div>
           </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </ProtectedRoute>
   );
 }
