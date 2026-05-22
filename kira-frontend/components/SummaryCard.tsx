@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { authApi } from '@/lib/auth';
+import { apiFetch } from '@/lib/api';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 const LOADING_STATES = [
   'Tokenizing asset data...',
   'Extracting features...',
@@ -34,7 +34,7 @@ export default function SummaryCard() {
     const timeout = window.setTimeout(async () => {
       try {
         const token = authApi.getToken();
-        const response = await fetch(`${API_URL}/api/summarize`, {
+        const response = await apiFetch('/api/summarize', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

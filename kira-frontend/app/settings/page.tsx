@@ -1,8 +1,19 @@
+'use client';
+
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
+import { authApi } from '@/lib/auth';
 
 export default function SettingsPage() {
+  const router = useRouter();
+
+  const handleLogout = () => {
+    authApi.logout();
+    router.push('/auth/login');
+  };
+
   return (
     <main className="flex min-h-screen bg-gray-100">
       <Sidebar />
@@ -22,7 +33,7 @@ export default function SettingsPage() {
         </div>
 
         {/* CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
 
           {/* PROFILE */}
           <Link
@@ -60,6 +71,23 @@ export default function SettingsPage() {
               Change your password and manage account security settings.
             </p>
           </Link>
+
+          <button
+            onClick={handleLogout}
+            className="text-left w-full bg-white rounded-2xl p-8 shadow-sm hover:shadow-md transition border border-red-100"
+          >
+            <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center text-2xl text-red-600">
+              🚪
+            </div>
+
+            <h2 className="text-2xl font-bold text-gray-900 mt-6">
+              Logout
+            </h2>
+
+            <p className="text-gray-500 mt-3 leading-relaxed">
+              Sign out of your account and clear your session.
+            </p>
+          </button>
         </div>
       </div>
     </main>

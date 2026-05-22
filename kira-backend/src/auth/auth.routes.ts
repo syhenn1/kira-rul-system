@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import passport from 'passport';
-import { register, login, googleCallback, getMe } from './auth.controller';
+import { register, login, googleCallback, getMe, updateProfile } from './auth.controller';
 import { authenticateJWT } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -20,5 +20,6 @@ router.get(
 );
 
 router.get('/me', authenticateJWT, getMe);
+router.put('/me', authenticateJWT, updateProfile);
 
 export default router;

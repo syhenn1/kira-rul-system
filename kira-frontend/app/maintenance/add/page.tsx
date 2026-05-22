@@ -8,6 +8,8 @@ import Swal from 'sweetalert2';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import { apiFetch } from '@/lib/api';
+import { authApi } from '@/lib/auth';
 
 export default function AddMaintenancePage() {
   const router = useRouter();
@@ -40,10 +42,10 @@ export default function AddMaintenancePage() {
     
     setIsSubmitting(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/maintenances', {
+      const token = authApi.getToken();
+      const response = await apiFetch('/api/maintenances', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },

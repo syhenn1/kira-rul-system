@@ -9,14 +9,17 @@ datasource db {
 }
 
 model User {
-  id             String          @id @default(uuid())
-  name           String
-  email          String          @unique
-  password       String?
-  google_id      String?         @unique
-  ownedCompanies Company[]       @relation("CompanyOwner")
-  memberships    CompanyMember[]
-  maintenances   Maintenance[]
+  id              String          @id @default(uuid())
+  name            String
+  email           String          @unique
+  password        String?
+  google_id       String?         @unique
+  profile_picture String?
+  phone           String?
+  department      String?
+  ownedCompanies  Company[]       @relation("CompanyOwner")
+  memberships     CompanyMember[]
+  maintenances    Maintenance[]
 
   @@map("users")
 }
@@ -60,6 +63,7 @@ model Asset {
   type                String   // Contoh: 'Generator Portable' (Tipe)
   criticality_level   String   // Contoh: 'Critical' (Tingkat Kekritisan)
   status              String   // Active, Maintenance, Replaced, Scrapped
+  asset_image         String?
 
   company            Company                 @relation(fields: [id_perusahaan], references: [id])
   maintenances       Maintenance[]
