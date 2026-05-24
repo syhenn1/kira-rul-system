@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg(process.env.DATABASE_URL || ''),
@@ -23,13 +24,15 @@ async function main() {
   console.log(`👤 Menyiapkan ${TARGET_COUNT} data User...`);
   const usersToInsert = [];
 
+  const defaultPassword = await bcrypt.hash('admin', 10);
+
   // User utama Anda (Debug User)
   const mainUserId = '115deaf4-d9f2-45ea-9c07-44d94d05d59c';
   usersToInsert.push({
     id: mainUserId,
     name: 'Mochamad Rifat Syahman Hambali',
     email: 'rifat@perusahaan.com',
-    password: 'hashedpassword123',
+    password: defaultPassword,
   });
 
   for (let i = 2; i <= TARGET_COUNT; i++) {
@@ -37,7 +40,7 @@ async function main() {
       id: crypto.randomUUID(),
       name: `User Pekerja ${i}`,
       email: `pekerja${i}_${crypto.randomUUID().substring(0, 5)}@mail.com`,
-      password: 'hashedpassword123',
+      password: defaultPassword,
     });
   }
   await prisma.user.createMany({ data: usersToInsert });
