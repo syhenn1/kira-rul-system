@@ -1,7 +1,8 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { User } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
 import { authApi, AuthUser } from '@/lib/auth';
@@ -10,6 +11,7 @@ export default function ProfileSettingsPage() {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string>('');
   const [profilePictureValue, setProfilePictureValue] = useState<string | null>(null);
@@ -21,9 +23,9 @@ export default function ProfileSettingsPage() {
   });
 
   useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const data = await authApi.getCurrentUser();
+    authApi
+      .getCurrentUser()
+      .then((data) => {
         setUser(data);
         setFormData({
           name: data.name || '',
@@ -32,23 +34,17 @@ export default function ProfileSettingsPage() {
           department: data.department || '',
         });
         setPreview(data.profile_picture || '');
-      } catch (err) {
-        console.error(err);
-        router.push('/auth/login');
-      }
-    };
-
-    loadUser();
+      })
+      .catch(() => router.push('/auth/login'));
   }, [router]);
 
   const handleInputChange = (field: keyof typeof formData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
@@ -61,128 +57,97 @@ export default function ProfileSettingsPage() {
   const handleSubmit = async () => {
     setIsSaving(true);
     setError(null);
-
+    setSuccess(false);
     try {
       const updated = await authApi.updateProfile({
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
         department: formData.department,
-        profile_picture: profilePictureValue ?? preview || undefined,
+        profile_picture: (profilePictureValue ?? preview) || undefined,
       });
-
       setUser(updated);
       authApi.saveSession(authApi.getToken() || '', updated);
       setPreview(updated.profile_picture || preview);
-    } catch (err: any) {
-      setError(err.message || 'Gagal memperbarui profil');
+      setSuccess(true);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Gagal memperbarui profil');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleLogout = () => {
-    authApi.logout();
-    router.push('/auth/login');
-  };
+  const fields: { field: keyof typeof formData; label: string; placeholder: string; type: string }[] = [
+    { field: 'name', label: 'Nama Lengkap', placeholder: 'Masukkan nama lengkap', type: 'text' },
+    { field: 'email', label: 'Email', placeholder: 'Masukkan email', type: 'email' },
+    { field: 'phone', label: 'Nomor Telepon', placeholder: 'Masukkan nomor telepon', type: 'text' },
+    { field: 'department', label: 'Departemen', placeholder: 'Masukkan departemen', type: 'text' },
+  ];
 
   return (
-    <main className="flex min-h-screen bg-gray-100">
+    <main className="flex min-h-screen bg-[#F5F7FB]">
       <Sidebar />
 
       <div className="flex-1 ml-64 p-8">
         <Topbar />
 
-        <div className="mt-8">
-          <h1 className="text-4xl font-bold text-gray-900">Profile Settings</h1>
-          <p className="text-gray-500 mt-2">Update your profile information and photo.</p>
+        <div className="mt-8 animate-[slideUp_0.5s_ease-out_both]">
+          <h1 className="text-3xl font-bold text-gray-900">Profile</h1>
+          <p className="text-gray-500 mt-1 text-sm">Perbarui informasi profil dan foto kamu</p>
         </div>
 
-        <div className="bg-white rounded-2xl p-8 shadow-sm mt-8">
-          <div className="flex flex-col lg:flex-row items-start gap-10">
-            <div className="flex items-center gap-6">
-              <div className="w-28 h-28 rounded-full overflow-hidden bg-blue-50 border border-blue-100">
-                {preview ? (
-                  <img src={preview} alt="Avatar Preview" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-4xl text-blue-500">
-                    👤
-                  </div>
-                )}
-              </div>
-
-              <label className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100 transition">
-                Upload Photo
-                <input type="file" accept="image/*" className="sr-only" onChange={handleImageChange} />
-              </label>
+        <div className="mt-8 max-w-xl space-y-3 animate-[slideUp_0.5s_0.1s_ease-out_both]">
+          {/* Avatar card */}
+          <div className="bg-white rounded-2xl px-5 py-4 shadow-sm flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
+              {preview ? (
+                <img src={preview} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <User size={24} className="text-gray-400" />
+              )}
             </div>
-
-            <button
-              onClick={handleLogout}
-              className="ml-auto rounded-2xl bg-red-500 px-6 py-3 text-white font-medium hover:bg-red-600 transition"
-            >
-              Logout
-            </button>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-gray-800 text-sm truncate">{user?.name || '—'}</p>
+              <p className="text-xs text-gray-400 mt-0.5 truncate">{user?.email}</p>
+            </div>
+            <label className="shrink-0 cursor-pointer text-xs text-blue-600 hover:text-blue-700 font-medium transition">
+              Ganti foto
+              <input type="file" accept="image/*" className="sr-only" onChange={handleImageChange} />
+            </label>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-10">
-            <div>
-              <label className="text-sm font-medium text-gray-700">Full Name</label>
+          {/* Field cards */}
+          {fields.map(({ field, label, placeholder, type }) => (
+            <div key={field} className="bg-white rounded-2xl px-5 py-4 shadow-sm">
+              <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">{label}</label>
               <input
-                value={formData.name}
-                onChange={(e) => handleInputChange('name', e.target.value)}
-                type="text"
-                placeholder="Enter your full name"
-                className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                value={formData[field]}
+                onChange={(e) => handleInputChange(field, e.target.value)}
+                type={type}
+                placeholder={placeholder}
+                className="w-full mt-1.5 text-gray-800 text-sm bg-transparent outline-none border-b border-gray-100 pb-1 focus:border-blue-400 transition"
               />
             </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700">Email</label>
-              <input
-                value={formData.email}
-                onChange={(e) => handleInputChange('email', e.target.value)}
-                type="email"
-                placeholder="Enter your email"
-                className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700">Phone Number</label>
-              <input
-                value={formData.phone}
-                onChange={(e) => handleInputChange('phone', e.target.value)}
-                type="text"
-                placeholder="Enter your phone number"
-                className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700">Department</label>
-              <input
-                value={formData.department}
-                onChange={(e) => handleInputChange('department', e.target.value)}
-                type="text"
-                placeholder="Enter your department"
-                className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
+          ))}
 
           {error && (
-            <div className="mt-6 rounded-2xl bg-red-50 border border-red-100 p-4 text-red-700">
+            <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
               {error}
+            </div>
+          )}
+
+          {success && (
+            <div className="rounded-xl bg-green-50 border border-green-100 px-4 py-3 text-sm text-green-700">
+              Profil berhasil diperbarui.
             </div>
           )}
 
           <button
             onClick={handleSubmit}
             disabled={isSaving}
-            className="mt-8 rounded-2xl bg-blue-600 px-6 py-3 text-white font-medium hover:bg-blue-700 transition disabled:bg-blue-400"
+            className="w-full rounded-2xl bg-blue-600 py-3 text-white text-sm font-semibold hover:bg-blue-700 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {isSaving ? 'Saving...' : 'Save Changes'}
+            {isSaving ? 'Menyimpan...' : 'Simpan Perubahan'}
           </button>
         </div>
       </div>

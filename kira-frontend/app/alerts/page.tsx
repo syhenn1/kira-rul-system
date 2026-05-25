@@ -1,155 +1,218 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { ChevronRight, AlertTriangle, Clock, Eye } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
+import { authApi } from '@/lib/auth';
+import { API_URL } from '@/lib/api';
+
+const CRITICAL = 6;
+const HIGH = 12;
+const WATCH = 24;
+
+type AlertAsset = {
+  id: string;
+  asset_name: string;
+  brand: string;
+  category: string;
+  sub_category: string;
+  criticality_level: string;
+  status: string;
+  predicted_rul: number;
+  mode_severity: string;
+  maintenance_count: number;
+  recorded_at: string;
+};
+
+function urgency(rul: number) {
+  if (rul <= CRITICAL) return {
+    label: 'Critical',
+    badgeBg: 'bg-red-100', badgeText: 'text-red-600',
+    bar: 'bg-red-500', border: 'border-l-red-500',
+    icon: AlertTriangle, iconColor: 'text-red-500',
+  };
+  if (rul <= HIGH) return {
+    label: 'High',
+    badgeBg: 'bg-orange-100', badgeText: 'text-orange-600',
+    bar: 'bg-orange-400', border: 'border-l-orange-400',
+    icon: Clock, iconColor: 'text-orange-400',
+  };
+  return {
+    label: 'Watch',
+    badgeBg: 'bg-yellow-100', badgeText: 'text-yellow-700',
+    bar: 'bg-yellow-400', border: 'border-l-yellow-400',
+    icon: Eye, iconColor: 'text-yellow-500',
+  };
+}
+
+type Filter = 'all' | 'critical' | 'high' | 'watch';
 
 export default function AlertsPage() {
-  const alerts = [
-    {
-      title: '12 assets need maintenance',
-      desc: 'These assets have passed their maintenance schedule',
-      level: 'High',
-      time: '6h ago',
-      color: 'red',
-    },
-    {
-      title: '7 assets overdue (not returned)',
-      desc: 'These assets have not been returned after check out',
-      level: 'Medium',
-      time: '1d ago',
-      color: 'orange',
-    },
-    {
-      title: '23 assets check-in today',
-      desc: 'Assets have been checked in today',
-      level: 'Info',
-      time: '2h ago',
-      color: 'blue',
-    },
-    {
-      title: '5 assets in damaged condition',
-      desc: 'These assets need immediate attention',
-      level: 'High',
-      time: '3h ago',
-      color: 'red',
-    },
-    {
-      title: 'Maintenance scheduled tomorrow',
-      desc: '10 assets have maintenance scheduled tomorrow',
-      level: 'Info',
-      time: '1d ago',
-      color: 'blue',
-    },
+  const [assets, setAssets] = useState<AlertAsset[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<Filter>('all');
+
+  useEffect(() => {
+    const token = authApi.getToken();
+    fetch(`${API_URL}/api/alerts`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((d) => setAssets(d.alerts || []))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const critical = assets.filter((a) => a.predicted_rul <= CRITICAL);
+  const high = assets.filter((a) => a.predicted_rul > CRITICAL && a.predicted_rul <= HIGH);
+  const watch = assets.filter((a) => a.predicted_rul > HIGH && a.predicted_rul <= WATCH);
+
+  const filtered =
+    filter === 'critical' ? critical
+    : filter === 'high' ? high
+    : filter === 'watch' ? watch
+    : assets;
+
+  const tabs: { key: Filter; label: string; count: number; activeClass: string }[] = [
+    { key: 'all', label: 'Semua', count: assets.length, activeClass: 'bg-gray-800 text-white' },
+    { key: 'critical', label: 'Critical', count: critical.length, activeClass: 'bg-red-500 text-white' },
+    { key: 'high', label: 'High', count: high.length, activeClass: 'bg-orange-500 text-white' },
+    { key: 'watch', label: 'Watch', count: watch.length, activeClass: 'bg-yellow-500 text-white' },
   ];
 
-  const getBadge = (level: string) => {
-    if (level === 'High') {
-      return 'bg-red-100 text-red-600';
-    }
-
-    if (level === 'Medium') {
-      return 'bg-yellow-100 text-yellow-700';
-    }
-
-    return 'bg-blue-100 text-blue-600';
-  };
-
-  const getIcon = (color: string) => {
-    if (color === 'red') {
-      return (
-        <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center text-red-600 text-xl font-bold">
-          !
-        </div>
-      );
-    }
-
-    if (color === 'orange') {
-      return (
-        <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-700 text-xl font-bold">
-          !
-        </div>
-      );
-    }
-
-    return (
-      <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xl font-bold">
-        i
-      </div>
-    );
-  };
-
   return (
-    <main className="flex min-h-screen bg-gray-100">
+    <main className="flex min-h-screen bg-[#F5F7FB]">
       <Sidebar />
 
       <div className="flex-1 ml-64 p-8">
         <Topbar />
 
-        {/* HEADER */}
-        <div className="flex items-center justify-between mt-8">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900">
-              Alerts
-            </h1>
-
-            <p className="text-gray-500 mt-2">
-              Monitor important notifications and asset alerts
-            </p>
-          </div>
-
-          <button className="text-blue-600 font-medium hover:text-blue-700">
-            All Alerts
-          </button>
+        <div className="mt-8 animate-[slideUp_0.5s_ease-out_both]">
+          <h1 className="text-3xl font-bold text-gray-900">Alerts</h1>
+          <p className="text-gray-500 mt-1 text-sm">
+            Aset yang memiliki sisa umur pakai di bawah ambang batas dan perlu perhatian
+          </p>
         </div>
 
-        {/* ALERTS LIST */}
-        <div className="mt-8 space-y-4">
-
-          {alerts.map((alert, index) => (
-            <div
-              key={index}
-              className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition"
+        {/* Summary strip */}
+        <div className="grid grid-cols-3 gap-4 mt-6 animate-[slideUp_0.5s_0.1s_ease-out_both]">
+          {[
+            { key: 'critical' as Filter, count: critical.length, label: 'RUL ≤ 6 bulan', activeColor: 'bg-red-500', textColor: 'text-red-600' },
+            { key: 'high' as Filter, count: high.length, label: 'RUL ≤ 12 bulan', activeColor: 'bg-orange-500', textColor: 'text-orange-500' },
+            { key: 'watch' as Filter, count: watch.length, label: 'RUL ≤ 24 bulan', activeColor: 'bg-yellow-500', textColor: 'text-yellow-600' },
+          ].map(({ key, count, label, activeColor, textColor }) => (
+            <button
+              key={key}
+              onClick={() => setFilter(filter === key ? 'all' : key)}
+              className={`rounded-2xl p-5 text-left transition-all duration-300 ${
+                filter === key
+                  ? `${activeColor} text-white shadow-lg scale-[1.02]`
+                  : 'bg-white shadow-sm hover:shadow-md hover:-translate-y-0.5'
+              }`}
             >
-              <div className="flex items-center justify-between">
-
-                {/* LEFT */}
-                <div className="flex items-center gap-5">
-
-                  {getIcon(alert.color)}
-
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900">
-                      {alert.title}
-                    </h2>
-
-                    <p className="text-gray-500 mt-1">
-                      {alert.desc}
-                    </p>
-                  </div>
-                </div>
-
-                {/* RIGHT */}
-                <div className="flex items-center gap-4">
-
-                  <span
-                    className={`px-4 py-1 rounded-full text-sm font-medium ${getBadge(
-                      alert.level
-                    )}`}
-                  >
-                    {alert.level}
-                  </span>
-
-                  <span className="text-gray-400 text-sm">
-                    {alert.time}
-                  </span>
-                </div>
+              <div className={`text-3xl font-bold ${filter === key ? 'text-white' : textColor}`}>
+                {count}
               </div>
-            </div>
+              <div className={`text-sm font-medium mt-1 ${filter === key ? 'text-white/80' : 'text-gray-500'}`}>
+                {label}
+              </div>
+            </button>
           ))}
         </div>
 
-        {/* FOOTER */}
-        <div className="mt-8 text-center text-sm text-gray-400">
-          Showing 1-5 of 5 alerts
+        {/* Filter tabs */}
+        <div className="flex gap-2 mt-6 animate-[fadeIn_0.4s_0.2s_ease-out_both]">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setFilter(t.key)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                filter === t.key ? t.activeClass : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              {t.label}
+              <span className="ml-1.5 opacity-70">{t.count}</span>
+            </button>
+          ))}
         </div>
+
+        {/* List */}
+        <div className="mt-4 space-y-3">
+          {loading && (
+            <div className="text-center py-20 text-gray-400 text-sm">Memuat data...</div>
+          )}
+
+          {!loading && filtered.length === 0 && (
+            <div className="text-center py-20 bg-white rounded-2xl shadow-sm text-gray-400 text-sm">
+              Tidak ada aset dalam kategori ini.
+            </div>
+          )}
+
+          {filtered.map((asset, i) => {
+            const u = urgency(asset.predicted_rul);
+            const pct = Math.min(100, Math.round((asset.predicted_rul / WATCH) * 100));
+            const Icon = u.icon;
+
+            return (
+              <div
+                key={asset.id}
+                className={`stagger-item bg-white rounded-2xl p-5 shadow-sm border-l-4 ${u.border} hover:shadow-md transition-all duration-300 hover:-translate-y-0.5`}
+                style={{ animationDelay: `${i * 45}ms` }}
+              >
+                <div className="flex items-center gap-5">
+                  <div className={`flex-shrink-0 ${u.iconColor}`}>
+                    <Icon size={20} />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-semibold text-gray-900">{asset.asset_name}</h3>
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${u.badgeBg} ${u.badgeText}`}>
+                        {u.label}
+                      </span>
+                      {asset.criticality_level === 'Critical' && (
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                          Kritis
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-sm text-gray-400 mt-0.5">
+                      {asset.brand} — {asset.category} / {asset.sub_category}
+                    </p>
+
+                    <div className="mt-3 flex items-center gap-3">
+                      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${u.bar}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">
+                        {asset.predicted_rul} bulan
+                      </span>
+                    </div>
+                  </div>
+
+                  <Link
+                    href={`/assets/${asset.id}`}
+                    className="flex-shrink-0 text-gray-300 hover:text-gray-600 transition ml-2"
+                  >
+                    <ChevronRight size={18} />
+                  </Link>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {!loading && assets.length > 0 && (
+          <div className="mt-6 text-center text-xs text-gray-400">
+            Menampilkan {filtered.length} dari {assets.length} aset yang memerlukan perhatian
+          </div>
+        )}
       </div>
     </main>
   );

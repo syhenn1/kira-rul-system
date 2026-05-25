@@ -32,6 +32,7 @@ model Company {
   owner          User            @relation("CompanyOwner", fields: [owner_id], references: [id])
   members        CompanyMember[]
   assets         Asset[]
+  technicians    Technician[]
 
   @@map("companies")
 }
@@ -76,20 +77,39 @@ model Maintenance {
   id               String    @id @default(uuid())
   id_asset         String
   id_user          String
+  id_teknisi       String?   // Teknisi yang ditugaskan (opsional)
   maintenance_type String
-  severity         String    // Contoh: 'Low', 'Medium', 'High' (Untuk mencari Modus/Mode Severity)
+  severity         String
   scheduled_date   DateTime
-  start_date       DateTime? // Kapan perbaikan mulai benar-benar dikerjakan
-  completion_date  DateTime? // Kapan aktual selesai
-  down_time        Int       @default(0) // downtime aktual dalam jam/hari (Kalkulasi dari start_date sampai completion_date)
-  cost             Float     @default(0.0) // Biaya Perbaikan
-  status           String    // Scheduled, In Progress, Completed
+  start_date       DateTime?
+  completion_date  DateTime?
+  down_time        Int       @default(0)
+  cost             Float     @default(0.0)
+  status           String
 
   asset              Asset                    @relation(fields: [id_asset], references: [id])
   user               User                     @relation(fields: [id_user], references: [id])
+  technician         Technician?              @relation(fields: [id_teknisi], references: [id])
   prediction_history AssetPredictionHistory[]
 
   @@map("maintenances")
+}
+
+model Technician {
+  id               String   @id @default(uuid())
+  id_perusahaan    String
+  name             String
+  email            String   @unique
+  phone            String?
+  specialization   String   // Mekanikal, Elektrikal, Sipil, HVAC, dll.
+  status           String   @default("Tersedia") // Tersedia, Ditugaskan, Tidak Aktif
+  experience_years Int      @default(0)
+  created_at       DateTime @default(now())
+
+  company      Company       @relation(fields: [id_perusahaan], references: [id])
+  maintenances Maintenance[]
+
+  @@map("technicians")
 }
 
 // TABEL HISTORI: Tempat menyimpan log agregat DAN hasil prediksi RUL (Selalu INPUT BARU)

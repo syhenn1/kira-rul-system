@@ -2,9 +2,31 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { User, Lock, Palette, ChevronRight, LogOut } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
 import { authApi } from '@/lib/auth';
+
+const items = [
+  {
+    href: '/settings/profile',
+    icon: User,
+    label: 'Profile',
+    desc: 'Perbarui nama, foto, nomor telepon, dan departemen kamu.',
+  },
+  {
+    href: '/settings/security',
+    icon: Lock,
+    label: 'Security',
+    desc: 'Ubah password dan kelola keamanan akun.',
+  },
+  {
+    href: '/settings/personalization',
+    icon: Palette,
+    label: 'Personalization',
+    desc: 'Atur preferensi tampilan dan notifikasi.',
+  },
+];
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -15,79 +37,45 @@ export default function SettingsPage() {
   };
 
   return (
-    <main className="flex min-h-screen bg-gray-100">
+    <main className="flex min-h-screen bg-[#F5F7FB]">
       <Sidebar />
 
       <div className="flex-1 ml-64 p-8">
         <Topbar />
 
-        {/* HEADER */}
-        <div className="mt-8">
-          <h1 className="text-4xl font-bold text-gray-900">
-            Settings
-          </h1>
-
-          <p className="text-gray-500 mt-2">
-            Manage your account settings and preferences
-          </p>
+        <div className="mt-8 animate-[slideUp_0.5s_ease-out_both]">
+          <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
+          <p className="text-gray-500 mt-1 text-sm">Kelola akun dan preferensi kamu</p>
         </div>
 
-        {/* CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+        <div className="mt-8 max-w-xl space-y-2 animate-[slideUp_0.5s_0.1s_ease-out_both]">
+          {items.map(({ href, icon: Icon, label, desc }, i) => (
+            <Link
+              key={href}
+              href={href}
+              className="stagger-item flex items-center gap-4 bg-white rounded-2xl px-5 py-4 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 group"
+              style={{ animationDelay: `${i * 60}ms` }}
+            >
+              <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 group-hover:bg-blue-50 transition-colors">
+                <Icon size={18} className="text-gray-500 group-hover:text-blue-600 transition-colors" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-gray-800 text-sm">{label}</div>
+                <div className="text-xs text-gray-400 mt-0.5">{desc}</div>
+              </div>
+              <ChevronRight size={16} className="text-gray-300 group-hover:text-gray-500 transition-colors shrink-0" />
+            </Link>
+          ))}
 
-          {/* PROFILE */}
-          <Link
-            href="/settings/profile"
-            className="bg-white rounded-2xl p-8 shadow-sm hover:shadow-md transition"
-          >
-            <div className="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center text-2xl text-blue-600">
-              👤
-            </div>
-
-            <h2 className="text-2xl font-bold text-gray-900 mt-6">
-              Profile Settings
-            </h2>
-
-            <p className="text-gray-500 mt-3 leading-relaxed">
-              Update your personal information, profile photo,
-              and account details.
-            </p>
-          </Link>
-
-          {/* SECURITY */}
-          <Link
-            href="/settings/security"
-            className="bg-white rounded-2xl p-8 shadow-sm hover:shadow-md transition"
-          >
-            <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center text-2xl text-red-600">
-              🔒
-            </div>
-
-            <h2 className="text-2xl font-bold text-gray-900 mt-6">
-              Security Settings
-            </h2>
-
-            <p className="text-gray-500 mt-3 leading-relaxed">
-              Change your password and manage account security settings.
-            </p>
-          </Link>
-
-          <button
-            onClick={handleLogout}
-            className="text-left w-full bg-white rounded-2xl p-8 shadow-sm hover:shadow-md transition border border-red-100"
-          >
-            <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center text-2xl text-red-600">
-              🚪
-            </div>
-
-            <h2 className="text-2xl font-bold text-gray-900 mt-6">
-              Logout
-            </h2>
-
-            <p className="text-gray-500 mt-3 leading-relaxed">
-              Sign out of your account and clear your session.
-            </p>
-          </button>
+          <div className="pt-4">
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 text-sm text-red-400 hover:text-red-600 font-medium transition px-1 py-1"
+            >
+              <LogOut size={15} />
+              Sign out
+            </button>
+          </div>
         </div>
       </div>
     </main>
