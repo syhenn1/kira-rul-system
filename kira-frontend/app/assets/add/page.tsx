@@ -39,8 +39,8 @@ export default function AddAssetPage() {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/assets', {
+      const token = localStorage.getItem('kira_token');
+      const response = await fetch('http://localhost:3001/api/assets', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

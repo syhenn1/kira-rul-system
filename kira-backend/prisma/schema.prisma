@@ -9,14 +9,17 @@ datasource db {
 }
 
 model User {
-  id             String          @id @default(uuid())
-  name           String
-  email          String          @unique
-  password       String?
-  google_id      String?         @unique
-  ownedCompanies Company[]       @relation("CompanyOwner")
-  memberships    CompanyMember[]
-  maintenances   Maintenance[]
+  id                   String           @id @default(uuid())
+  name                 String
+  email                String           @unique
+  password             String?
+  google_id            String?          @unique
+  ownedCompanies       Company[]        @relation("CompanyOwner")
+  memberships          CompanyMember[]
+  maintenances         Maintenance[]
+  assignedMaintenances Maintenance[]    @relation("AssignedTechnician")
+  maintenanceLogs      MaintenanceLog[] @relation("MaintenanceLogCreator")
+  technicianLogs       MaintenanceLog[] @relation("MaintenanceLogTechnician")
 
   @@map("users")
 }
@@ -51,17 +54,17 @@ model Asset {
   id_perusahaan       String
   asset_name          String
   purchase_date       DateTime
-  initial_useful_life Int      // Umur teoritis awal (dalam bulan)
-  
-  // --- FITUR KATEGORIKAL (INPUT UNTUK PREDIKSI) ---
-  brand               String   // Contoh: 'Sharp' (Merek)
-  category            String   // Contoh: 'Mechanical' (Kategori)
-  sub_category        String   // Contoh: 'Tata Udara' (Sub Kategori)
-  type                String   // Contoh: 'Generator Portable' (Tipe)
-  criticality_level   String   // Contoh: 'Critical' (Tingkat Kekritisan)
-  status              String   // Active, Maintenance, Replaced, Scrapped
+  initial_useful_life Int // Umur teoritis awal (dalam bulan)
 
-  company            Company                 @relation(fields: [id_perusahaan], references: [id])
+  // --- FITUR KATEGORIKAL (INPUT UNTUK PREDIKSI) ---
+  brand             String // Contoh: 'Sharp' (Merek)
+  category          String // Contoh: 'Mechanical' (Kategori)
+  sub_category      String // Contoh: 'Tata Udara' (Sub Kategori)
+  type              String // Contoh: 'Generator Portable' (Tipe)
+  criticality_level String // Contoh: 'Critical' (Tingkat Kekritisan)
+  status            String // Active, Maintenance, Replaced, Scrapped
+
+  company            Company                  @relation(fields: [id_perusahaan], references: [id])
   maintenances       Maintenance[]
   prediction_history AssetPredictionHistory[]
 
@@ -69,41 +72,64 @@ model Asset {
 }
 
 model Maintenance {
-  id               String    @id @default(uuid())
-  id_asset         String
-  id_user          String
-  maintenance_type String
-  severity         String    // Contoh: 'Low', 'Medium', 'High' (Untuk mencari Modus/Mode Severity)
-  scheduled_date   DateTime
-  start_date       DateTime? // Kapan perbaikan mulai benar-benar dikerjakan
-  completion_date  DateTime? // Kapan aktual selesai
-  down_time        Int       @default(0) // downtime aktual dalam jam/hari (Kalkulasi dari start_date sampai completion_date)
-  cost             Float     @default(0.0) // Biaya Perbaikan
-  status           String    // Scheduled, In Progress, Completed
+  id                     String    @id @default(uuid())
+  id_asset               String
+  id_user                String
+  assigned_technician_id String?
+  maintenance_type       String
+  severity               String // Contoh: 'Low', 'Medium', 'High' (Untuk mencari Modus/Mode Severity)
+  scheduled_date         DateTime
+  start_date             DateTime? // Kapan perbaikan mulai benar-benar dikerjakan
+  completion_date        DateTime? // Kapan aktual selesai
+  down_time              Int       @default(0) // downtime aktual dalam jam/hari (Kalkulasi dari start_date sampai completion_date)
+  cost                   Float     @default(0.0) // Biaya Perbaikan
+  status                 String // Scheduled, In Progress, Completed
 
   asset              Asset                    @relation(fields: [id_asset], references: [id])
   user               User                     @relation(fields: [id_user], references: [id])
+  assignedTechnician User?                    @relation("AssignedTechnician", fields: [assigned_technician_id], references: [id])
+  logs               MaintenanceLog[]
   prediction_history AssetPredictionHistory[]
 
   @@map("maintenances")
 }
 
+model MaintenanceLog {
+  id              String    @id @default(uuid())
+  id_maintenance  String
+  id_user         String
+  technician_id   String?
+  status          String
+  note            String
+  start_date      DateTime?
+  completion_date DateTime?
+  down_time       Int       @default(0)
+  cost            Float     @default(0.0)
+  created_at      DateTime  @default(now())
+
+  maintenance Maintenance @relation(fields: [id_maintenance], references: [id])
+  user        User        @relation("MaintenanceLogCreator", fields: [id_user], references: [id])
+  technician  User?       @relation("MaintenanceLogTechnician", fields: [technician_id], references: [id])
+
+  @@map("maintenance_logs")
+}
+
 // TABEL HISTORI: Tempat menyimpan log agregat DAN hasil prediksi RUL (Selalu INPUT BARU)
 model AssetPredictionHistory {
-  id             String    @id @default(uuid())
+  id             String  @id @default(uuid())
   id_asset       String
-  id_maintenance String?   // NULL jika inisialisasi awal aset baru
+  id_maintenance String? // NULL jika inisialisasi awal aset baru
 
   // --- DATA AGREGAT YANG DIHITUNG OLEH SISTEM SEBELUM PREDIKSI ---
-  maintenance_count        Int   @default(0) // count(Nama Aset)
-  average_down_time        Float @default(0.0) // average(down_time)
-  total_maintenance_cost   Float @default(0.0) // sum(Biaya Perbaikan)
-  max_maintenance_cost     Float @default(0.0) // maximum(Biaya Perbaikan)
-  mode_severity            String @default("") // mode(Severity)
+  maintenance_count      Int    @default(0) // count(Nama Aset)
+  average_down_time      Float  @default(0.0) // average(down_time)
+  total_maintenance_cost Float  @default(0.0) // sum(Biaya Perbaikan)
+  max_maintenance_cost   Float  @default(0.0) // maximum(Biaya Perbaikan)
+  mode_severity          String @default("") // mode(Severity)
 
   // --- HASIL OUTPUT DARI MODEL AI ---
-  predicted_rul            Int       // Sisa umur hasil prediksi AI (dalam bulan)
-  recorded_at              DateTime  @default(now())
+  predicted_rul Int // Sisa umur hasil prediksi AI (dalam bulan)
+  recorded_at   DateTime @default(now())
 
   asset       Asset        @relation(fields: [id_asset], references: [id])
   maintenance Maintenance? @relation(fields: [id_maintenance], references: [id])
