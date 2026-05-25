@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Activity, AlertTriangle, CheckCircle2, ChevronRight, Cpu, Clock, Wrench } from "lucide-react";
+import { apiFetch } from '@/lib/api';
 
 export default function MaintenanceSimulator() {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -23,7 +24,7 @@ export default function MaintenanceSimulator() {
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:5000/api/predict-rul', {
+      const response = await apiFetch('/api/predict-rul', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)

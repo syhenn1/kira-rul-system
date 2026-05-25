@@ -38,6 +38,7 @@ passport.use(
               name: profile.displayName || email.split('@')[0] || email,
               email,
               google_id: profile.id,
+              profile_picture: profile.photos?.[0]?.value,
             },
           });
         }

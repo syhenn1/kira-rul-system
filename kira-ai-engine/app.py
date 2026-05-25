@@ -38,7 +38,7 @@ class MockRULPredictor:
 @app.on_event("startup")
 def load_models():
     global gb_model, preprocessor, feature_names
-    model_path = os.path.join(os.path.dirname(__file__), "gradient_boosting_model_retrained_new_data.joblib")
+    model_path = os.path.join(os.path.dirname(__file__), "v2_gradient_boosting_model_retrained_new_data.joblib")
     
     try:
         if os.path.exists(model_path):

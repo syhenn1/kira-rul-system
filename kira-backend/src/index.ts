@@ -338,6 +338,114 @@ app.post('/api/summarize', authenticateJWT, async (req: Request, res: Response) 
   }
 });
 
+// GET /api/technicians — daftar teknisi milik perusahaan user
+app.get('/api/technicians', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userCompany = await prisma.company.findFirst({
+      where: { owner_id: (req as any).user.id },
+    });
+    if (!userCompany) return res.status(404).json({ error: 'No company found' });
+
+    const { status, specialization } = req.query as { status?: string; specialization?: string };
+
+    const technicians = await (prisma as any).technician.findMany({
+      where: {
+        id_perusahaan: userCompany.id,
+        ...(status ? { status } : {}),
+        ...(specialization ? { specialization } : {}),
+      },
+      orderBy: [{ status: 'asc' }, { name: 'asc' }],
+    });
+
+    return res.status(200).json({ technicians });
+  } catch (error) {
+    console.error('Error fetching technicians:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// PATCH /api/technicians/:id/status — ubah status teknisi
+app.patch('/api/technicians/:id/status', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    const allowed = ['Tersedia', 'Ditugaskan', 'Tidak Aktif'];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ error: 'Status tidak valid' });
+    }
+
+    const updated = await (prisma as any).technician.update({
+      where: { id },
+      data: { status },
+    });
+    return res.status(200).json({ technician: updated });
+  } catch (error) {
+    console.error('Error updating technician status:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// GET /api/alerts — aset dengan predicted_rul <= 24 bulan (latest prediction per asset)
+app.get('/api/alerts', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userCompany = await prisma.company.findFirst({
+      where: { owner_id: (req as any).user.id },
+    });
+
+    if (!userCompany) {
+      return res.status(404).json({ error: 'No company found' });
+    }
+
+    const companyId = userCompany.id;
+
+    const alerts: any[] = await prisma.$queryRaw`
+      SELECT DISTINCT ON (a.id)
+        a.id, a.asset_name, a.brand, a.category, a.sub_category, a.type,
+        a.criticality_level, a.status,
+        aph.predicted_rul, aph.mode_severity, aph.maintenance_count, aph.recorded_at
+      FROM assets a
+      JOIN asset_prediction_history aph ON aph.id_asset = a.id
+      WHERE a.id_perusahaan = ${companyId}
+        AND aph.predicted_rul <= 24
+      ORDER BY a.id, aph.recorded_at DESC
+    `;
+
+    return res.status(200).json({ alerts });
+  } catch (error) {
+    console.error('Error fetching alerts:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// POST /api/auth/change-password
+app.post('/api/auth/change-password', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password) {
+      return res.status(400).json({ error: 'current_password and new_password required' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: (req as any).user.id } });
+    if (!user || !user.password) {
+      return res.status(400).json({ error: 'Password login not available for this account' });
+    }
+
+    const bcrypt = await import('bcryptjs');
+    const valid = await bcrypt.compare(current_password, user.password);
+    if (!valid) {
+      return res.status(401).json({ error: 'Password saat ini salah' });
+    }
+
+    const hashed = await bcrypt.hash(new_password, 10);
+    await prisma.user.update({ where: { id: user.id }, data: { password: hashed } as any });
+
+    return res.status(200).json({ message: 'Password berhasil diubah' });
+  } catch (error) {
+    console.error('Error changing password:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 // Endpoint untuk testing API
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK' });

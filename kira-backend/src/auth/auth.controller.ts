@@ -35,7 +35,14 @@ export const register = async (req: Request, res: Response) => {
     const token = signToken(user.id, user.email);
     return res.status(201).json({
       token,
-      user: { id: user.id, name: user.name, email: user.email },
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        profile_picture: (user as any).profile_picture ?? null,
+        phone: (user as any).phone ?? null,
+        department: (user as any).department ?? null,
+      },
     });
   } catch (err) {
     console.error('Register error:', err);
@@ -64,7 +71,14 @@ export const login = async (req: Request, res: Response) => {
     const token = signToken(user.id, user.email);
     return res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email },
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        profile_picture: (user as any).profile_picture ?? null,
+        phone: (user as any).phone ?? null,
+        department: (user as any).department ?? null,
+      },
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -89,12 +103,59 @@ export const getMe = async (req: Request, res: Response) => {
     const payload = req.user as { id: string };
     const user = await prisma.user.findUnique({
       where: { id: payload.id },
-      select: { id: true, name: true, email: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        profile_picture: true,
+        phone: true,
+        department: true,
+      },
     });
     if (!user) return res.status(404).json({ error: 'User not found' });
     return res.json(user);
   } catch (err) {
     console.error('GetMe error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const updateProfile = async (req: Request, res: Response) => {
+  try {
+    const payload = req.user as { id: string };
+    const { name, email, profile_picture, phone, department } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { id: payload.id } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (email && email !== user.email) {
+      const existing = await prisma.user.findUnique({ where: { email } });
+      if (existing) {
+        return res.status(409).json({ error: 'Email already registered' });
+      }
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: payload.id },
+      data: {
+        name: name ?? user.name,
+        email: email ?? user.email,
+        profile_picture: profile_picture ?? (user as any).profile_picture,
+        phone: phone ?? (user as any).phone,
+        department: department ?? (user as any).department,
+      },
+    });
+
+    return res.json({
+      id: updated.id,
+      name: updated.name,
+      email: updated.email,
+      profile_picture: (updated as any).profile_picture ?? null,
+      phone: (updated as any).phone ?? null,
+      department: (updated as any).department ?? null,
+    });
+  } catch (err) {
+    console.error('UpdateProfile error:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
