@@ -65,17 +65,18 @@ app.get('/api/assets', authenticateJWT, async (req: Request, res: Response) => {
 // API endpoint untuk menambahkan asset
 app.post('/api/assets', authenticateJWT, async (req: Request, res: Response) => {
   try {
-    const { 
-      asset_name, 
-      purchase_date, 
-      initial_useful_life, 
-      status, 
+    const {
+      asset_name,
+      purchase_date,
+      initial_useful_life,
+      status,
       id_perusahaan,
       brand,
       category,
       sub_category,
       type,
-      criticality_level
+      criticality_level,
+      gedung_id
     } = req.body;
 
     // Pastikan data yang diperlukan ada
@@ -109,9 +110,8 @@ app.post('/api/assets', authenticateJWT, async (req: Request, res: Response) => 
         type: type || 'General Equipment',
         criticality_level: criticality_level || 'Medium',
         status: finalStatus,
-        company: {
-          connect: { id: companyId },
-        },
+        company: { connect: { id: companyId } },
+        ...(gedung_id ? { gedung: { connect: { id: gedung_id } } } : {}),
       }
     });
 
@@ -951,6 +951,75 @@ app.post('/api/summarize', authenticateJWT, async (req: Request, res: Response) 
   }
 });
 
+// GET /api/gedung — daftar gedung milik perusahaan user
+app.get('/api/gedung', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userCompany = await prisma.company.findFirst({
+      where: { owner_id: (req as any).user.id },
+    });
+    if (!userCompany) return res.status(404).json({ error: 'No company found' });
+
+    const gedung = await (prisma as any).gedung.findMany({
+      where: { id_perusahaan: userCompany.id },
+      orderBy: { kode: 'asc' },
+    });
+    return res.status(200).json({ gedung });
+  } catch (error) {
+    console.error('Error fetching gedung:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// POST /api/gedung — tambah gedung baru
+app.post('/api/gedung', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const { nama, kode } = req.body;
+    if (!nama || !kode) return res.status(400).json({ error: 'nama dan kode wajib diisi' });
+    const userCompany = await prisma.company.findFirst({ where: { owner_id: (req as any).user.id } });
+    if (!userCompany) return res.status(404).json({ error: 'No company found' });
+    const gedung = await (prisma as any).gedung.create({
+      data: { nama, kode: kode.toUpperCase(), id_perusahaan: userCompany.id },
+    });
+    return res.status(201).json({ gedung });
+  } catch (error: any) {
+    if (error?.code === 'P2002') return res.status(409).json({ error: 'Kode gedung sudah digunakan' });
+    console.error('Error creating gedung:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// PATCH /api/gedung/:id — update gedung
+app.patch('/api/gedung/:id', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const { nama, kode } = req.body;
+    const gedung = await (prisma as any).gedung.update({
+      where: { id: req.params.id },
+      data: { ...(nama && { nama }), ...(kode && { kode: kode.toUpperCase() }) },
+    });
+    return res.status(200).json({ gedung });
+  } catch (error: any) {
+    if (error?.code === 'P2025') return res.status(404).json({ error: 'Gedung tidak ditemukan' });
+    if (error?.code === 'P2002') return res.status(409).json({ error: 'Kode gedung sudah digunakan' });
+    console.error('Error updating gedung:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// DELETE /api/gedung/:id — hapus gedung
+app.delete('/api/gedung/:id', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    // Lepaskan relasi aset sebelum hapus gedung
+    const gedungId = String(req.params.id);
+    await prisma.asset.updateMany({ where: { gedung_id: gedungId }, data: { gedung_id: null } });
+    await (prisma as any).gedung.delete({ where: { id: gedungId } });
+    return res.status(200).json({ message: 'Gedung berhasil dihapus' });
+  } catch (error: any) {
+    if (error?.code === 'P2025') return res.status(404).json({ error: 'Gedung tidak ditemukan' });
+    console.error('Error deleting gedung:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 // GET /api/technicians — daftar teknisi milik perusahaan user
 app.get('/api/technicians', authenticateJWT, async (req: Request, res: Response) => {
   try {
@@ -1026,6 +1095,190 @@ app.get('/api/alerts', authenticateJWT, async (req: Request, res: Response) => {
     return res.status(200).json({ alerts });
   } catch (error) {
     console.error('Error fetching alerts:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// GET /api/dashboard — aggregated stats for the dashboard
+app.get('/api/dashboard', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userCompany = await prisma.company.findFirst({
+      where: { owner_id: (req as any).user.id },
+    });
+    if (!userCompany) return res.status(404).json({ error: 'No company found' });
+    const companyId = userCompany.id;
+
+    // Asset counts total + per status
+    const totalAssets = await prisma.asset.count({ where: { id_perusahaan: companyId } });
+    const statusCounts: any[] = await prisma.$queryRaw`
+      SELECT status, COUNT(*)::int AS count
+      FROM assets WHERE id_perusahaan = ${companyId}
+      GROUP BY status
+    `;
+
+    // Top categories for donut chart
+    const categoryCounts: any[] = await prisma.$queryRaw`
+      SELECT category, COUNT(*)::int AS count
+      FROM assets WHERE id_perusahaan = ${companyId}
+      GROUP BY category ORDER BY count DESC LIMIT 7
+    `;
+
+    // Monthly maintenance count — last 6 months
+    const monthlyTrend: any[] = await prisma.$queryRaw`
+      SELECT
+        TO_CHAR(DATE_TRUNC('month', m.scheduled_date), 'Mon YY') AS month,
+        DATE_TRUNC('month', m.scheduled_date) AS month_ts,
+        COUNT(*)::int AS count
+      FROM maintenances m
+      JOIN assets a ON a.id = m.id_asset
+      WHERE a.id_perusahaan = ${companyId}
+        AND m.scheduled_date >= NOW() - INTERVAL '6 months'
+      GROUP BY DATE_TRUNC('month', m.scheduled_date)
+      ORDER BY month_ts
+    `;
+
+    // Alerts summary (latest predicted_rul per asset)
+    const alertsSummary: any[] = await prisma.$queryRaw`
+      SELECT
+        SUM(CASE WHEN aph.predicted_rul <= 6  THEN 1 ELSE 0 END)::int  AS critical,
+        SUM(CASE WHEN aph.predicted_rul > 6  AND aph.predicted_rul <= 12 THEN 1 ELSE 0 END)::int AS high,
+        SUM(CASE WHEN aph.predicted_rul > 12 AND aph.predicted_rul <= 24 THEN 1 ELSE 0 END)::int AS watch
+      FROM (
+        SELECT DISTINCT ON (a.id) a.id, aph.predicted_rul
+        FROM assets a
+        JOIN asset_prediction_history aph ON aph.id_asset = a.id
+        WHERE a.id_perusahaan = ${companyId}
+        ORDER BY a.id, aph.recorded_at DESC
+      ) aph
+    `;
+
+    // Upcoming maintenances (next 5 by scheduled_date)
+    const upcoming = await prisma.maintenance.findMany({
+      where: {
+        asset: { id_perusahaan: companyId },
+        scheduled_date: { gte: new Date() },
+        status: { not: 'Completed' },
+      },
+      include: { asset: { select: { asset_name: true } } },
+      orderBy: { scheduled_date: 'asc' },
+      take: 5,
+    });
+
+    // Recent maintenance activity (last 5)
+    const recent = await prisma.maintenance.findMany({
+      where: { asset: { id_perusahaan: companyId } },
+      include: {
+        asset: { select: { asset_name: true } },
+        user: { select: { name: true } },
+      },
+      orderBy: { scheduled_date: 'desc' },
+      take: 5,
+    });
+
+    const alerts = alertsSummary[0] ?? { critical: 0, high: 0, watch: 0 };
+
+    return res.status(200).json({
+      stats: {
+        total: totalAssets,
+        by_status: statusCounts,
+      },
+      by_category: categoryCounts,
+      monthly_trend: monthlyTrend.map((r) => ({ month: r.month, count: r.count })),
+      alerts_summary: {
+        critical: Number(alerts.critical) || 0,
+        high: Number(alerts.high) || 0,
+        watch: Number(alerts.watch) || 0,
+      },
+      upcoming_maintenances: upcoming.map((m) => ({
+        id: m.id,
+        asset_name: m.asset.asset_name,
+        scheduled_date: m.scheduled_date,
+        severity: m.severity,
+        status: m.status,
+        maintenance_type: m.maintenance_type,
+      })),
+      recent_maintenances: recent.map((m) => ({
+        id: m.id,
+        asset_name: m.asset.asset_name,
+        maintenance_type: m.maintenance_type,
+        severity: m.severity,
+        status: m.status,
+        scheduled_date: m.scheduled_date,
+        cost: m.cost,
+        user_name: m.user.name,
+      })),
+    });
+  } catch (error) {
+    console.error('Error fetching dashboard data:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// GET /api/reports/assets — asset report with latest RUL per asset
+app.get('/api/reports/assets', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userCompany = await prisma.company.findFirst({
+      where: { owner_id: (req as any).user.id },
+    });
+    if (!userCompany) return res.status(404).json({ error: 'No company found' });
+    const companyId = userCompany.id;
+
+    const assets: any[] = await prisma.$queryRaw`
+      SELECT DISTINCT ON (a.id)
+        a.id, a.asset_name, a.brand, a.category, a.sub_category, a.type,
+        a.criticality_level, a.status, a.purchase_date,
+        COALESCE(aph.predicted_rul, a.initial_useful_life) AS predicted_rul,
+        COALESCE(aph.maintenance_count, 0) AS maintenance_count,
+        COALESCE(aph.total_maintenance_cost, 0) AS total_cost,
+        aph.recorded_at
+      FROM assets a
+      LEFT JOIN asset_prediction_history aph ON aph.id_asset = a.id
+      WHERE a.id_perusahaan = ${companyId}
+      ORDER BY a.id, aph.recorded_at DESC NULLS LAST
+    `;
+
+    return res.status(200).json({ assets });
+  } catch (error) {
+    console.error('Error fetching asset report:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// GET /api/reports/maintenance — full maintenance history
+app.get('/api/reports/maintenance', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userCompany = await prisma.company.findFirst({
+      where: { owner_id: (req as any).user.id },
+    });
+    if (!userCompany) return res.status(404).json({ error: 'No company found' });
+    const companyId = userCompany.id;
+
+    const maintenances = await prisma.maintenance.findMany({
+      where: { asset: { id_perusahaan: companyId } },
+      include: {
+        asset: { select: { asset_name: true, category: true } },
+        user: { select: { name: true } },
+      },
+      orderBy: { scheduled_date: 'desc' },
+    });
+
+    return res.status(200).json({
+      maintenances: maintenances.map((m) => ({
+        id: m.id,
+        asset_name: m.asset.asset_name,
+        category: m.asset.category,
+        maintenance_type: m.maintenance_type,
+        severity: m.severity,
+        status: m.status,
+        scheduled_date: m.scheduled_date,
+        completion_date: m.completion_date,
+        cost: m.cost,
+        down_time: m.down_time,
+        user_name: m.user.name,
+      })),
+    });
+  } catch (error) {
+    console.error('Error fetching maintenance report:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });

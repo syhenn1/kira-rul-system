@@ -71,6 +71,68 @@ body {
   animation: staggerIn 0.35s ease-out both;
 }
 
+/* ── Tooltip ─────────────────────────────────────────────────────────────── */
+@keyframes tooltipPop {
+  from { opacity: 0; transform: scale(0.82) translateY(4px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);   }
+}
+
+/* ── Tour overlay card ──────────────────────────────────────────────────── */
+@keyframes tourCardIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0)     scale(1);   }
+}
+
+/* ── Onboarding step slide ──────────────────────────────────────────────── */
+@keyframes onboardSlide {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0);    }
+}
+
+/* ── Illustration float ─────────────────────────────────────────────────── */
+@keyframes floatIllus {
+  0%, 100% { transform: translateY(0px)   rotate(0deg); }
+  33%       { transform: translateY(-10px) rotate(1deg); }
+  66%       { transform: translateY(-6px)  rotate(-1deg); }
+}
+
+/* ── Orbit spin ─────────────────────────────────────────────────────────── */
+@keyframes orbitSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Pulse ring ─────────────────────────────────────────────────────────── */
+@keyframes pulseRing {
+  0%   { box-shadow: 0 0 0 0   rgba(59,130,246,0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(59,130,246,0);   }
+  100% { box-shadow: 0 0 0 0   rgba(59,130,246,0);    }
+}
+
+/* ── Page element entrance ──────────────────────────────────────────────── */
+@keyframes enterUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+@keyframes enterLeft {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0);     }
+}
+
+/* ── SVG draw line ──────────────────────────────────────────────────────── */
+@keyframes drawSvgLine {
+  from { stroke-dashoffset: 300; }
+  to   { stroke-dashoffset: 0;   }
+}
+
+/* ── Pop in (for onboarding icon) ─────────────────────────────────────── */
+@keyframes popIn {
+  0%   { transform: scale(0)   rotate(-8deg); opacity: 0; }
+  65%  { transform: scale(1.1) rotate(2deg);  opacity: 1; }
+  100% { transform: scale(1)   rotate(0deg);  opacity: 1; }
+}
+
 /* Glassmorphism utilities */
 .glass {
   background: rgba(255, 255, 255, 0.03);

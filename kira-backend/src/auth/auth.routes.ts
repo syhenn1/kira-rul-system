@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import passport from 'passport';
-import { register, login, googleCallback, getMe, updateProfile } from './auth.controller';
+import { register, login, googleCallback, getMe, updateProfile, setPin, verifyPin } from './auth.controller';
 import { authenticateJWT } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -21,5 +21,7 @@ router.get(
 
 router.get('/me', authenticateJWT, getMe);
 router.put('/me', authenticateJWT, updateProfile);
+router.post('/set-pin', authenticateJWT, setPin);
+router.post('/verify-pin', authenticateJWT, verifyPin);
 
 export default router;

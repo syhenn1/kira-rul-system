@@ -5,8 +5,28 @@ import Link from 'next/link';
 import { ChevronRight, AlertTriangle, Clock, Eye } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
+import Tooltip from '@/components/Tooltip';
+import TourOverlay from '@/components/TourOverlay';
 import { authApi } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
+
+const TOUR_STEPS = [
+  {
+    target: 'alert-summary-cards',
+    title: 'Kartu Ringkasan RUL',
+    desc: 'Menampilkan jumlah aset per kategori kekritisan berdasarkan Remaining Useful Life (RUL). Klik kartu untuk memfilter daftar di bawah.',
+  },
+  {
+    target: 'alert-filter-tabs',
+    title: 'Tab Filter',
+    desc: 'Gunakan tab ini untuk melihat semua aset atau menyaring per kategori: Critical (≤6 bln), High (≤12 bln), atau Watch (≤24 bln).',
+  },
+  {
+    target: 'alert-list',
+    title: 'Daftar Aset Berisiko',
+    desc: 'Setiap kartu menampilkan nama aset, level urgensi, brand/kategori, dan bar RUL. Klik panah (→) di kanan untuk melihat detail aset.',
+  },
+];
 
 const CRITICAL = 6;
 const HIGH = 12;
@@ -47,12 +67,15 @@ function urgency(rul: number) {
   };
 }
 
+const PAGE_SIZE = 10;
+
 type Filter = 'all' | 'critical' | 'high' | 'watch';
 
 export default function AlertsPage() {
   const [assets, setAssets] = useState<AlertAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     const token = authApi.getToken();
@@ -75,6 +98,9 @@ export default function AlertsPage() {
     : filter === 'watch' ? watch
     : assets;
 
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   const tabs: { key: Filter; label: string; count: number; activeClass: string }[] = [
     { key: 'all', label: 'Semua', count: assets.length, activeClass: 'bg-gray-800 text-white' },
     { key: 'critical', label: 'Critical', count: critical.length, activeClass: 'bg-red-500 text-white' },
@@ -84,12 +110,13 @@ export default function AlertsPage() {
 
   return (
     <main className="flex min-h-screen bg-[#F5F7FB]">
+      <TourOverlay steps={TOUR_STEPS} storageKey="kira_tour_alerts" delay={800} />
       <Sidebar />
 
       <div className="flex-1 ml-64 p-8">
         <Topbar />
 
-        <div className="mt-8 animate-[slideUp_0.5s_ease-out_both]">
+        <div className="mt-8 animate-[enterUp_0.5s_ease-out_both]">
           <h1 className="text-3xl font-bold text-gray-900">Alerts</h1>
           <p className="text-gray-500 mt-1 text-sm">
             Aset yang memiliki sisa umur pakai di bawah ambang batas dan perlu perhatian
@@ -97,49 +124,66 @@ export default function AlertsPage() {
         </div>
 
         {/* Summary strip */}
-        <div className="grid grid-cols-3 gap-4 mt-6 animate-[slideUp_0.5s_0.1s_ease-out_both]">
+        <div
+          className="grid grid-cols-3 gap-4 mt-6 animate-[enterUp_0.5s_0.1s_ease-out_both]"
+          data-tour="alert-summary-cards"
+        >
           {[
-            { key: 'critical' as Filter, count: critical.length, label: 'RUL ≤ 6 bulan', activeColor: 'bg-red-500', textColor: 'text-red-600' },
-            { key: 'high' as Filter, count: high.length, label: 'RUL ≤ 12 bulan', activeColor: 'bg-orange-500', textColor: 'text-orange-500' },
-            { key: 'watch' as Filter, count: watch.length, label: 'RUL ≤ 24 bulan', activeColor: 'bg-yellow-500', textColor: 'text-yellow-600' },
-          ].map(({ key, count, label, activeColor, textColor }) => (
-            <button
-              key={key}
-              onClick={() => setFilter(filter === key ? 'all' : key)}
-              className={`rounded-2xl p-5 text-left transition-all duration-300 ${
-                filter === key
-                  ? `${activeColor} text-white shadow-lg scale-[1.02]`
-                  : 'bg-white shadow-sm hover:shadow-md hover:-translate-y-0.5'
-              }`}
-            >
-              <div className={`text-3xl font-bold ${filter === key ? 'text-white' : textColor}`}>
-                {count}
-              </div>
-              <div className={`text-sm font-medium mt-1 ${filter === key ? 'text-white/80' : 'text-gray-500'}`}>
-                {label}
-              </div>
-            </button>
+            { key: 'critical' as Filter, count: critical.length, label: 'RUL ≤ 6 bulan', activeColor: 'bg-red-500', textColor: 'text-red-600', tip: 'Aset kritis — perlu penanganan segera dalam 6 bulan' },
+            { key: 'high' as Filter, count: high.length, label: 'RUL ≤ 12 bulan', activeColor: 'bg-orange-500', textColor: 'text-orange-500', tip: 'Prioritas tinggi — sisa usia pakai di bawah 12 bulan' },
+            { key: 'watch' as Filter, count: watch.length, label: 'RUL ≤ 24 bulan', activeColor: 'bg-yellow-500', textColor: 'text-yellow-600', tip: 'Perlu dipantau — sisa usia pakai di bawah 24 bulan' },
+          ].map(({ key, count, label, activeColor, textColor, tip }) => (
+            <Tooltip key={key} content={tip} position="bottom">
+              <button
+                onClick={() => { setFilter(filter === key ? 'all' : key); setPage(1); }}
+                className={`w-full rounded-2xl p-5 text-left transition-all duration-300 ${
+                  filter === key
+                    ? `${activeColor} text-white shadow-lg scale-[1.02]`
+                    : 'bg-white shadow-sm hover:shadow-md hover:-translate-y-0.5'
+                }`}
+              >
+                <div className={`text-3xl font-bold ${filter === key ? 'text-white' : textColor}`}>
+                  {count}
+                </div>
+                <div className={`text-sm font-medium mt-1 ${filter === key ? 'text-white/80' : 'text-gray-500'}`}>
+                  {label}
+                </div>
+              </button>
+            </Tooltip>
           ))}
         </div>
 
         {/* Filter tabs */}
-        <div className="flex gap-2 mt-6 animate-[fadeIn_0.4s_0.2s_ease-out_both]">
+        <div
+          className="flex gap-2 mt-6 animate-[enterUp_0.5s_0.18s_ease-out_both]"
+          data-tour="alert-filter-tabs"
+        >
           {tabs.map((t) => (
-            <button
+            <Tooltip
               key={t.key}
-              onClick={() => setFilter(t.key)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
-                filter === t.key ? t.activeClass : 'bg-white text-gray-500 hover:bg-gray-50'
-              }`}
+              content={
+                t.key === 'all' ? 'Tampilkan semua aset yang memerlukan perhatian'
+                : t.key === 'critical' ? 'RUL ≤ 6 bulan — kritis'
+                : t.key === 'high' ? 'RUL ≤ 12 bulan — prioritas tinggi'
+                : 'RUL ≤ 24 bulan — perlu dipantau'
+              }
+              position="bottom"
             >
-              {t.label}
-              <span className="ml-1.5 opacity-70">{t.count}</span>
-            </button>
+              <button
+                onClick={() => { setFilter(t.key); setPage(1); }}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                  filter === t.key ? t.activeClass : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                {t.label}
+                <span className="ml-1.5 opacity-70">{t.count}</span>
+              </button>
+            </Tooltip>
           ))}
         </div>
 
         {/* List */}
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 space-y-3" data-tour="alert-list">
           {loading && (
             <div className="text-center py-20 text-gray-400 text-sm">Memuat data...</div>
           )}
@@ -150,7 +194,7 @@ export default function AlertsPage() {
             </div>
           )}
 
-          {filtered.map((asset, i) => {
+          {paginated.map((asset, i) => {
             const u = urgency(asset.predicted_rul);
             const pct = Math.min(100, Math.round((asset.predicted_rul / WATCH) * 100));
             const Icon = u.icon;
@@ -162,7 +206,7 @@ export default function AlertsPage() {
                 style={{ animationDelay: `${i * 45}ms` }}
               >
                 <div className="flex items-center gap-5">
-                  <div className={`flex-shrink-0 ${u.iconColor}`}>
+                  <div className={`shrink-0 ${u.iconColor}`}>
                     <Icon size={20} />
                   </div>
 
@@ -196,21 +240,47 @@ export default function AlertsPage() {
                     </div>
                   </div>
 
-                  <Link
-                    href={`/assets/${asset.id}`}
-                    className="flex-shrink-0 text-gray-300 hover:text-gray-600 transition ml-2"
-                  >
-                    <ChevronRight size={18} />
-                  </Link>
+                  <Tooltip content="Lihat detail aset" position="left">
+                    <Link
+                      href={`/assets/${asset.id}`}
+                      className="shrink-0 text-gray-300 hover:text-gray-600 transition ml-2"
+                    >
+                      <ChevronRight size={18} />
+                    </Link>
+                  </Tooltip>
                 </div>
               </div>
             );
           })}
         </div>
 
+        {/* Pagination */}
+        {!loading && totalPages > 1 && (
+          <div className="flex items-center justify-between mt-6 bg-white rounded-2xl px-6 py-4 shadow-sm">
+            <p className="text-xs text-gray-400">
+              {filtered.length} aset · halaman {page} dari {totalPages}
+            </p>
+            <div className="flex gap-1.5">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
+                    p === page
+                      ? 'bg-blue-600 text-white'
+                      : 'border border-gray-200 text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {!loading && assets.length > 0 && (
-          <div className="mt-6 text-center text-xs text-gray-400">
-            Menampilkan {filtered.length} dari {assets.length} aset yang memerlukan perhatian
+          <div className="mt-4 text-center text-xs text-gray-400">
+            Menampilkan {paginated.length} dari {filtered.length} aset yang memerlukan perhatian
           </div>
         )}
       </div>

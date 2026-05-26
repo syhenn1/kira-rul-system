@@ -110,12 +110,46 @@ export const getMe = async (req: Request, res: Response) => {
         profile_picture: true,
         phone: true,
         department: true,
+        pin: true,
       },
     });
     if (!user) return res.status(404).json({ error: 'User not found' });
-    return res.json(user);
+    const { pin, ...rest } = user;
+    return res.json({ ...rest, has_pin: pin !== null });
   } catch (err) {
     console.error('GetMe error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const setPin = async (req: Request, res: Response) => {
+  try {
+    const payload = req.user as { id: string };
+    const { pin } = req.body;
+    if (!pin || !/^\d{6}$/.test(pin)) {
+      return res.status(400).json({ error: 'PIN harus 6 digit angka' });
+    }
+    const hashed = await bcrypt.hash(pin, 10);
+    await prisma.user.update({ where: { id: payload.id }, data: { pin: hashed } });
+    return res.json({ message: 'PIN berhasil disimpan' });
+  } catch (err) {
+    console.error('SetPin error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const verifyPin = async (req: Request, res: Response) => {
+  try {
+    const payload = req.user as { id: string };
+    const { pin } = req.body;
+    if (!pin) return res.status(400).json({ error: 'PIN diperlukan' });
+    const user = await prisma.user.findUnique({ where: { id: payload.id }, select: { pin: true } });
+    if (!user?.pin) return res.status(400).json({ error: 'PIN belum diatur' });
+    const valid = await bcrypt.compare(pin, user.pin);
+    if (!valid) return res.status(401).json({ error: 'PIN salah' });
+    return res.json({ message: 'PIN valid' });
+  } catch (err) {
+    console.error('VerifyPin error:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };

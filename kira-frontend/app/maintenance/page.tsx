@@ -353,6 +353,8 @@ export default function MaintenancePage() {
 
   return (
     <ProtectedRoute>
+      <TourOverlay steps={TOUR_STEPS} storageKey="kira_tour_maintenance" delay={800} />
+
       <main className="flex min-h-screen bg-gray-100">
         <Sidebar />
 
