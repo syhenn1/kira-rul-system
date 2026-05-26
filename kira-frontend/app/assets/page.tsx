@@ -256,6 +256,13 @@ export default function AssetsPage() {
                             View
                           </Link>
 
+                          <Link
+                            href={`/maintenance/add?assetId=${encodeURIComponent(asset.id)}`}
+                            className="text-blue-600 hover:text-blue-700 font-medium"
+                          >
+                            Maintenance
+                          </Link>
+
                           <button className="text-red-500 hover:text-red-600 font-medium">
                             Delete
                           </button>
