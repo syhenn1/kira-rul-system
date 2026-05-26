@@ -13,6 +13,7 @@ model User {
   name            String
   email           String          @unique
   password        String?
+  pin             String?         // 6-digit PIN (bcrypt hashed)
   google_id       String?         @unique
   profile_picture String?
   phone           String?
@@ -33,6 +34,7 @@ model Company {
   members        CompanyMember[]
   assets         Asset[]
   technicians    Technician[]
+  gedung         Gedung[]
 
   @@map("companies")
 }
@@ -50,23 +52,36 @@ model CompanyMember {
   @@map("company_members")
 }
 
+model Gedung {
+  id            String  @id @default(uuid())
+  id_perusahaan String
+  nama          String  // e.g., 'Gedung A'
+  kode          String  // e.g., 'A', 'PARKIR', 'UTAMA'
+
+  company Company @relation(fields: [id_perusahaan], references: [id])
+  assets  Asset[]
+
+  @@unique([id_perusahaan, kode])
+  @@map("gedung")
+}
+
 model Asset {
-  id                  String   @id @default(uuid())
+  id                  String  @id @default(uuid())
   id_perusahaan       String
+  gedung_id           String?
   asset_name          String
   purchase_date       DateTime
-  initial_useful_life Int      // Umur teoritis awal (dalam bulan)
-  
-  // --- FITUR KATEGORIKAL (INPUT UNTUK PREDIKSI) ---
-  brand               String   // Contoh: 'Sharp' (Merek)
-  category            String   // Contoh: 'Mechanical' (Kategori)
-  sub_category        String   // Contoh: 'Tata Udara' (Sub Kategori)
-  type                String   // Contoh: 'Generator Portable' (Tipe)
-  criticality_level   String   // Contoh: 'Critical' (Tingkat Kekritisan)
-  status              String   // Active, Maintenance, Replaced, Scrapped
+  initial_useful_life Int
+  brand               String
+  category            String
+  sub_category        String
+  type                String
+  criticality_level   String
+  status              String
   asset_image         String?
 
-  company            Company                 @relation(fields: [id_perusahaan], references: [id])
+  company            Company                  @relation(fields: [id_perusahaan], references: [id])
+  gedung             Gedung?                  @relation(fields: [gedung_id], references: [id])
   maintenances       Maintenance[]
   prediction_history AssetPredictionHistory[]
 

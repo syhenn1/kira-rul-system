@@ -44,6 +44,7 @@ const menus = [
       { name: 'Gedung C', href: '/maintenance/gedung-c' },
     ],
   },
+  { name: 'Gedung', icon: Building2, href: '/gedung' },
   { name: 'Teknisi', icon: HardHat, href: '/users' },
   { name: 'Alerts', icon: Bell, href: '/alerts' },
   { name: 'Reports', icon: FileText, href: '/reports' },

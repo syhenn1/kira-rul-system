@@ -12,6 +12,7 @@ async function main() {
   await prisma.assetPredictionHistory.deleteMany({});
   await prisma.maintenance.deleteMany({});
   await prisma.asset.deleteMany({});
+  await prisma.gedung.deleteMany({});
   await prisma.technician.deleteMany({});
   await prisma.companyMember.deleteMany({});
   await prisma.company.deleteMany({});
@@ -31,8 +32,8 @@ async function main() {
   const mainUserId = '115deaf4-d9f2-45ea-9c07-44d94d05d59c';
   usersToInsert.push({
     id: mainUserId,
-    name: 'Mochamad Rifat Syahman Hambali',
-    email: 'rifat@perusahaan.com',
+    name: 'Admin',
+    email: 'admin@perusahaan.com',
     password: defaultPassword,
   });
 
@@ -100,24 +101,51 @@ async function main() {
   await prisma.companyMember.createMany({ data: membersToInsert });
 
   // ==========================================
-  // 4. GENERATE ASSETS
+  // 4. GENERATE GEDUNG
   // ==========================================
-  console.log(`📦 Menyiapkan ${TARGET_COUNT} data Asset...`);
+  console.log('Menyiapkan data Gedung...');
+  const gedungList = [
+    { kode: 'A',      nama: 'Gedung A' },
+    { kode: 'B',      nama: 'Gedung B' },
+    { kode: 'C',      nama: 'Gedung C' },
+    { kode: 'D',      nama: 'Gedung D' },
+    { kode: 'E',      nama: 'Gedung E' },
+    { kode: 'PARKIR', nama: 'Gedung Parkir' },
+    { kode: 'SERVIS', nama: 'Gedung Servis' },
+    { kode: 'UTAMA',  nama: 'Gedung Utama' },
+  ];
+
+  const gedungToInsert = gedungList.map((g) => ({
+    id: crypto.randomUUID(),
+    id_perusahaan: mainCompanyId,
+    nama: g.nama,
+    kode: g.kode,
+  }));
+  await prisma.gedung.createMany({ data: gedungToInsert });
+
+  // ==========================================
+  // 5. GENERATE ASSETS
+  // ==========================================
+  console.log(`Menyiapkan ${TARGET_COUNT} data Asset...`);
   const assetsToInsert = [];
   const categoriesPool = [
     { category: 'Mechanical', sub_cat: 'Tata Udara', types: ['AC Split', 'Chiller'], brands: ['Sharp', 'Daikin'] },
     { category: 'Electrical', sub_cat: 'Backup Power', types: ['UPS', 'Genset'], brands: ['APC', 'Perkins'] },
-    { category: 'Sistem Proteksi Kebakaran Aktif', sub_cat: 'Deteksi Kebakaran', types: ['Smoke Detector'], brands: ['Hochiki'] }
+    { category: 'Sistem Proteksi Kebakaran Aktif', sub_cat: 'Deteksi Kebakaran', types: ['Smoke Detector'], brands: ['Hochiki'] },
   ];
 
   for (let i = 1; i <= TARGET_COUNT; i++) {
     const pool = categoriesPool[i % categoriesPool.length];
-    // Masukkan mayoritas aset ke PT KIRA agar bisa Anda lihat di dashboard
     const compId = i <= 70 ? mainCompanyId : companiesToInsert[Math.floor(Math.random() * TARGET_COUNT)].id;
+    // Assign gedung hanya untuk aset milik perusahaan utama
+    const gedungId = compId === mainCompanyId
+      ? gedungToInsert[i % gedungToInsert.length].id
+      : null;
 
     assetsToInsert.push({
       id: crypto.randomUUID(),
       id_perusahaan: compId,
+      gedung_id: gedungId,
       asset_name: `${pool.types[i % pool.types.length]} ${pool.brands[i % pool.brands.length]} - 00${i}`,
       purchase_date: new Date(new Date().setMonth(new Date().getMonth() - Math.floor(Math.random() * 48))),
       initial_useful_life: 60,
@@ -234,6 +262,7 @@ async function main() {
   console.log(`  - Maintenance Records    : ${maintenancesToInsert.length}`);
   console.log(`  - RUL Predictions        : ${predictionsToInsert.length}`);
   console.log(`  - Technicians            : ${techniciansToInsert.length}`);
+  console.log(`  - Gedung                 : ${gedungToInsert.length}`);
   console.log('-----------------------------------------------');
 }
 

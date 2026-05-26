@@ -1,10 +1,6 @@
 'use client';
 
-import {
-  Bar,
-  Doughnut,
-} from 'react-chartjs-2';
-
+import { Bar, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -15,63 +11,71 @@ import {
   Legend,
 } from 'chart.js';
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  ArcElement,
-  Tooltip,
-  Legend
-);
+ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend);
 
-export function AssetBarChart() {
+const BAR_COLORS = ['#2563EB', '#22C55E', '#EAB308', '#EF4444', '#8B5CF6', '#F97316'];
+const DONUT_COLORS = ['#2563EB', '#EF4444', '#22C55E', '#EAB308', '#8B5CF6', '#F97316', '#06B6D4'];
+
+export function AssetBarChart({
+  labels,
+  datasets,
+}: {
+  labels?: string[];
+  datasets?: { label: string; data: number[]; color?: string }[];
+}) {
+  const defaultLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun'];
+  const defaultDatasets = [
+    { label: 'Maintenance', data: [3, 5, 4, 8, 6, 9], color: '#2563EB' },
+  ];
+
+  const resolvedLabels = labels ?? defaultLabels;
+  const resolvedDatasets = datasets ?? defaultDatasets;
+
   const data = {
-    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-    datasets: [
-      {
-        label: 'In Use',
-        data: [1200, 900, 1400, 500, 1000, 1500],
-        backgroundColor: '#2563EB',
-        borderRadius: 8,
-      },
-      {
-        label: 'Available',
-        data: [800, 1500, 1000, 700, 200, 500],
-        backgroundColor: '#22C55E',
-        borderRadius: 8,
-      },
-    ],
+    labels: resolvedLabels,
+    datasets: resolvedDatasets.map((ds, i) => ({
+      label: ds.label,
+      data: ds.data,
+      backgroundColor: ds.color ?? BAR_COLORS[i % BAR_COLORS.length],
+      borderRadius: 8,
+    })),
   };
 
   const options = {
     responsive: true,
     maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-      },
+    plugins: { legend: { position: 'top' as const } },
+    scales: {
+      y: { beginAtZero: true, ticks: { precision: 0 } },
     },
   };
 
   return (
-    <div className="h-[320px]">
+    <div className="h-80">
       <Bar data={data} options={options} />
     </div>
   );
 }
 
-export function AssetDonutChart() {
+export function AssetDonutChart({
+  labels,
+  data: values,
+}: {
+  labels?: string[];
+  data?: number[];
+}) {
+  const defaultLabels = ['AC', 'Printer', 'Laptop', 'Others'];
+  const defaultValues = [30, 25, 20, 25];
+
+  const resolvedLabels = labels ?? defaultLabels;
+  const resolvedValues = values ?? defaultValues;
+
   const data = {
-    labels: ['AC', 'Printer', 'Laptop', 'Others'],
+    labels: resolvedLabels,
     datasets: [
       {
-        data: [1250, 1250, 1250, 1250],
-        backgroundColor: [
-          '#2563EB',
-          '#EF4444',
-          '#22C55E',
-          '#EAB308',
-        ],
+        data: resolvedValues,
+        backgroundColor: DONUT_COLORS.slice(0, resolvedLabels.length),
         borderWidth: 0,
       },
     ],
@@ -81,11 +85,7 @@ export function AssetDonutChart() {
     responsive: true,
     maintainAspectRatio: false,
     cutout: '70%',
-    plugins: {
-      legend: {
-        position: 'right' as const,
-      },
-    },
+    plugins: { legend: { position: 'right' as const } },
   };
 
   return (

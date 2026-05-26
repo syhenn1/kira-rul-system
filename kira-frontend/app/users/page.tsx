@@ -4,8 +4,33 @@ import { useEffect, useState } from 'react';
 import { Search, Filter } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
+import Tooltip from '@/components/Tooltip';
+import TourOverlay from '@/components/TourOverlay';
 import { authApi } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
+
+const TOUR_STEPS = [
+  {
+    target: 'teknisi-status-cards',
+    title: 'Kartu Status Teknisi',
+    desc: 'Menampilkan jumlah teknisi berdasarkan ketersediaan. Klik kartu mana saja untuk memfilter tabel hanya menampilkan teknisi pada status tersebut.',
+  },
+  {
+    target: 'teknisi-search',
+    title: 'Cari Teknisi',
+    desc: 'Ketik nama atau email teknisi untuk menyaring daftar secara real-time.',
+  },
+  {
+    target: 'teknisi-spec-filter',
+    title: 'Filter Spesialisasi',
+    desc: 'Filter teknisi berdasarkan bidang keahliannya — Mekanikal, Elektrikal, IT & Jaringan, dan lainnya.',
+  },
+  {
+    target: 'teknisi-table',
+    title: 'Daftar Teknisi',
+    desc: 'Setiap baris menampilkan profil teknisi, spesialisasi, pengalaman, dan status. Gunakan dropdown di kolom terakhir untuk mengubah status ketersediaan langsung.',
+  },
+];
 
 type Technician = {
   id: string;
@@ -97,12 +122,13 @@ export default function TeknisiPage() {
 
   return (
     <main className="flex min-h-screen bg-[#F5F7FB]">
+      <TourOverlay steps={TOUR_STEPS} storageKey="kira_tour_users" delay={800} />
       <Sidebar />
 
       <div className="flex-1 ml-64 p-8">
         <Topbar />
 
-        <div className="mt-8 animate-[slideUp_0.5s_ease-out_both]">
+        <div className="mt-8 animate-[enterUp_0.5s_ease-out_both]">
           <h1 className="text-3xl font-bold text-gray-900">Teknisi</h1>
           <p className="text-gray-500 mt-1 text-sm">
             Daftar teknisi yang tersedia untuk ditugaskan ke pekerjaan maintenance
@@ -110,52 +136,65 @@ export default function TeknisiPage() {
         </div>
 
         {/* Summary strip */}
-        <div className="grid grid-cols-3 gap-4 mt-6 animate-[slideUp_0.5s_0.08s_ease-out_both]">
+        <div
+          className="grid grid-cols-3 gap-4 mt-6 animate-[enterUp_0.5s_0.08s_ease-out_both]"
+          data-tour="teknisi-status-cards"
+        >
           {[
-            { label: 'Tersedia', count: counts.tersedia, color: 'text-green-600', active: statusFilter === 'Tersedia', key: 'Tersedia' },
-            { label: 'Ditugaskan', count: counts.ditugaskan, color: 'text-yellow-600', active: statusFilter === 'Ditugaskan', key: 'Ditugaskan' },
-            { label: 'Tidak Aktif', count: counts.tidakAktif, color: 'text-gray-500', active: statusFilter === 'Tidak Aktif', key: 'Tidak Aktif' },
-          ].map(({ label, count, color, active, key }) => (
-            <button
-              key={key}
-              onClick={() => { setStatusFilter(active ? 'Semua' : key); setPage(1); }}
-              className={`rounded-2xl p-5 text-left transition-all duration-300 ${
-                active ? 'bg-gray-800 text-white shadow-lg scale-[1.02]' : 'bg-white shadow-sm hover:shadow-md hover:-translate-y-0.5'
-              }`}
-            >
-              <div className={`text-3xl font-bold ${active ? 'text-white' : color}`}>{count}</div>
-              <div className={`text-sm font-medium mt-1 ${active ? 'text-white/70' : 'text-gray-500'}`}>{label}</div>
-            </button>
+            { label: 'Tersedia', count: counts.tersedia, color: 'text-green-600', active: statusFilter === 'Tersedia', key: 'Tersedia', tip: 'Teknisi siap ditugaskan — klik untuk filter' },
+            { label: 'Ditugaskan', count: counts.ditugaskan, color: 'text-yellow-600', active: statusFilter === 'Ditugaskan', key: 'Ditugaskan', tip: 'Teknisi sedang menangani pekerjaan — klik untuk filter' },
+            { label: 'Tidak Aktif', count: counts.tidakAktif, color: 'text-gray-500', active: statusFilter === 'Tidak Aktif', key: 'Tidak Aktif', tip: 'Teknisi tidak aktif — klik untuk filter' },
+          ].map(({ label, count, color, active, key, tip }) => (
+            <Tooltip key={key} content={tip} position="bottom">
+              <button
+                onClick={() => { setStatusFilter(active ? 'Semua' : key); setPage(1); }}
+                className={`w-full rounded-2xl p-5 text-left transition-all duration-300 ${
+                  active ? 'bg-gray-800 text-white shadow-lg scale-[1.02]' : 'bg-white shadow-sm hover:shadow-md hover:-translate-y-0.5'
+                }`}
+              >
+                <div className={`text-3xl font-bold ${active ? 'text-white' : color}`}>{count}</div>
+                <div className={`text-sm font-medium mt-1 ${active ? 'text-white/70' : 'text-gray-500'}`}>{label}</div>
+              </button>
+            </Tooltip>
           ))}
         </div>
 
         {/* Filter bar */}
-        <div className="bg-white rounded-2xl px-5 py-4 shadow-sm mt-4 flex flex-col lg:flex-row gap-3 animate-[fadeIn_0.4s_0.15s_ease-out_both]">
+        <div className="bg-white rounded-2xl px-5 py-4 shadow-sm mt-4 flex flex-col lg:flex-row gap-3 animate-[enterUp_0.5s_0.15s_ease-out_both]">
           <div className="relative flex-1">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Cari nama atau email..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
-            />
+            <Tooltip content="Cari teknisi berdasarkan nama atau email" position="bottom">
+              <input
+                data-tour="teknisi-search"
+                type="text"
+                placeholder="Cari nama atau email..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
+              />
+            </Tooltip>
           </div>
 
           <div className="flex items-center gap-2">
             <Filter size={14} className="text-gray-400 shrink-0" />
-            <select
-              value={specFilter}
-              onChange={(e) => { setSpecFilter(e.target.value); setPage(1); }}
-              className="text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 outline-none focus:ring-2 focus:ring-blue-400"
-            >
-              {SPECIALIZATIONS.map((s) => <option key={s}>{s}</option>)}
-            </select>
+            <Tooltip content="Filter teknisi berdasarkan bidang spesialisasi" position="bottom">
+              <select
+                data-tour="teknisi-spec-filter"
+                value={specFilter}
+                onChange={(e) => { setSpecFilter(e.target.value); setPage(1); }}
+                className="text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 outline-none focus:ring-2 focus:ring-blue-400"
+              >
+                {SPECIALIZATIONS.map((s) => <option key={s}>{s}</option>)}
+              </select>
+            </Tooltip>
           </div>
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-2xl shadow-sm mt-4 overflow-hidden animate-[fadeIn_0.4s_0.2s_ease-out_both]">
+        <div
+          className="bg-white rounded-2xl shadow-sm mt-4 overflow-hidden animate-[enterUp_0.5s_0.22s_ease-out_both]"
+          data-tour="teknisi-table"
+        >
           <div className="overflow-x-auto">
             <table className="w-full min-w-175">
               <thead>
@@ -221,16 +260,18 @@ export default function TeknisiPage() {
                     </td>
 
                     <td className="px-6 py-4">
-                      <select
-                        value={t.status}
-                        disabled={updatingId === t.id}
-                        onChange={(e) => handleStatusChange(t.id, e.target.value)}
-                        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
-                      >
-                        <option>Tersedia</option>
-                        <option>Ditugaskan</option>
-                        <option>Tidak Aktif</option>
-                      </select>
+                      <Tooltip content="Ubah status ketersediaan teknisi" position="left">
+                        <select
+                          value={t.status}
+                          disabled={updatingId === t.id}
+                          onChange={(e) => handleStatusChange(t.id, e.target.value)}
+                          className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
+                        >
+                          <option>Tersedia</option>
+                          <option>Ditugaskan</option>
+                          <option>Tidak Aktif</option>
+                        </select>
+                      </Tooltip>
                     </td>
                   </tr>
                 ))}
