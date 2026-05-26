@@ -1,92 +1,130 @@
 # Kira RUL System
 
-Kira RUL System is a full-stack SaaS asset management platform with integrated AI capabilities to predict the **Remaining Useful Life (RUL)** of assets and classify the severity of maintenance tasks.
+Kira RUL System is a full-stack asset management platform with integrated AI capabilities to predict the **Remaining Useful Life (RUL)** of assets and classify the severity of maintenance tasks.
 
-## 🚀 Features
+## Technology Stack
 
-- **Asset Management Dashboard:** Track and manage all your assets in one centralized interface.
-- **RUL Prediction:** Utilize AI models to simulate and predict the remaining useful life of assets based on maintenance records and usage.
-- **Maintenance Severity Classification:** Automatically classify the severity of maintenance tasks based on underlying causes.
-- **Modern UI:** Built with Next.js, Tailwind CSS, and Recharts for dynamic and interactive data visualization.
-- **Robust Backend:** Powered by Node.js, Express, and Prisma ORM connecting to a PostgreSQL database.
-
-## 🛠️ Technology Stack
-
-- **Frontend:** Next.js (App Router), React, Tailwind CSS, Recharts, Lucide React
+- **Frontend:** Next.js (App Router), React, Tailwind CSS, Recharts
 - **Backend:** Node.js, Express, TypeScript, Prisma ORM
-- **Database:** PostgreSQL (via Prisma)
-- **AI/ML Engine:** Custom AI prediction module (`kira-ai-engine`)
-- **Workflow:** Concurrently runs both frontend and backend for seamless development.
+- **Database:** PostgreSQL
+- **AI Engine:** FastAPI (Python), scikit-learn, Gradient Boosting model
 
-## 📂 Project Structure
+## Project Structure
 
-This project is a monorepo containing the following workspaces:
-
-```text
+```
 kira-rul-system/
-├── kira-frontend/     # Next.js frontend application
-├── kira-backend/      # Express.js REST API and Prisma ORM
-├── kira-ai-engine/    # AI/ML services for RUL prediction
-└── package.json       # Root configuration for running concurrent scripts
+├── kira-frontend/      # Next.js frontend (port 3000)
+├── kira-backend/       # Express REST API + Prisma ORM (port 3001)
+├── kira-ai-engine/     # FastAPI RUL prediction service (port 8000)
+└── package.json        # Root scripts — runs all three concurrently
 ```
 
-## 💻 Getting Started
+## Prerequisites
 
-### Prerequisites
+- Node.js v18 or higher
+- Python 3.10 or higher
+- PostgreSQL
 
-Ensure you have the following installed:
-- [Node.js](https://nodejs.org/) (v18 or higher)
-- [PostgreSQL](https://www.postgresql.org/)
+## Setup
 
-### Installation
+### 1. Clone the repository
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/syhenn1/kira-rul-system.git
-   cd kira-rul-system
-   ```
+```bash
+git clone https://github.com/syhenn1/kira-rul-system.git
+cd kira-rul-system
+```
 
-2. **Install Root Dependencies:**
-   ```bash
-   npm install
-   ```
+### 2. Install Node.js dependencies
 
-3. **Install Backend Dependencies:**
-   ```bash
-   cd kira-backend
-   npm install
-   ```
+```bash
+# Root (concurrently)
+npm install
 
-4. **Install Frontend Dependencies:**
-   ```bash
-   cd ../kira-frontend
-   npm install
-   ```
+# Backend
+cd kira-backend && npm install && cd ..
 
-### Database Setup
+# Frontend
+cd kira-frontend && npm install && cd ..
+```
 
-1. Navigate to the `kira-backend` directory.
-2. Create a `.env` file and configure your `DATABASE_URL`:
-   ```env
-   DATABASE_URL="postgresql://user:password@localhost:5432/kira_db?schema=public"
-   ```
-3. Run Prisma migrations to set up the database schema:
-   ```bash
-   npx prisma migrate dev
-   npx prisma generate
-   ```
+### 3. Set up Python virtual environment (AI Engine)
 
-### Running the Application (Development Mode)
+```bash
+cd kira-ai-engine
+python -m venv venv
+.\venv\Scripts\pip install -r requirements.txt
+cd ..
+```
 
-From the **root directory** (`kira-rul-system`), you can start both the frontend and backend simultaneously:
+> On macOS/Linux: use `source venv/bin/activate` and `pip install -r requirements.txt` instead.
+
+### 4. Configure environment variables
+
+**Backend** — copy `.env.example` to `.env` inside `kira-backend/`:
+
+```env
+PORT=3001
+FRONTEND_URL=http://localhost:3000
+AI_ENGINE_URL=http://localhost:8000
+
+DATABASE_URL=postgresql://postgres:password@localhost:5010/my_asset_db?schema=public
+
+JWT_SECRET=your_jwt_secret_here
+GOOGLE_CLIENT_ID=your_google_client_id_here
+GOOGLE_CLIENT_SECRET=your_google_client_secret_here
+GOOGLE_CALLBACK_URL=http://localhost:3001/api/auth/google/callback
+```
+
+**Frontend** — copy `.env.local.example` to `.env.local` inside `kira-frontend/`:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3001
+```
+
+### 5. Set up the database
+
+```bash
+cd kira-backend
+npx prisma migrate dev
+npx prisma generate
+```
+
+To seed initial data:
+
+```bash
+npm run seed
+```
+
+## Running in Development
+
+From the **root directory**, run all three services at once:
 
 ```bash
 npm run dev
 ```
 
-- **Frontend:** http://localhost:3000
-- **Backend API:** http://localhost:5000 (or as configured in your backend)
+| Service    | URL                   |
+|------------|-----------------------|
+| Frontend   | http://localhost:3000 |
+| Backend    | http://localhost:3001 |
+| AI Engine  | http://localhost:8000 |
 
-## 📄 License
+Individual scripts are also available:
 
-This project is licensed under the ISC License.
+```bash
+npm run dev:frontend   # Next.js only
+npm run dev:backend    # Express only
+npm run dev:ai         # FastAPI only
+```
+
+## AI Engine Notes
+
+The AI engine uses a pre-trained Gradient Boosting model stored as a `.joblib` file in `kira-ai-engine/`. If the model file is missing, the engine falls back to a mock predictor that returns simulated RUL values for testing purposes.
+
+The model file expected: `v2_gradient_boosting_model_retrained_new_data.joblib`
+
+Prediction endpoint: `POST http://localhost:8000/predict`
+
+## License
+
+ISC

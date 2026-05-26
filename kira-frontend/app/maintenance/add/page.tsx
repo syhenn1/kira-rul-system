@@ -8,6 +8,8 @@ import Swal from 'sweetalert2';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import { apiFetch } from '@/lib/api';
+import { authApi } from '@/lib/auth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -153,10 +155,10 @@ export default function AddMaintenancePage() {
     
     setIsSubmitting(true);
     try {
-      const token = localStorage.getItem('kira_token');
-      const response = await fetch(`${API_URL}/api/maintenances`, {
+      const token = authApi.getToken();
+      const response = await apiFetch('/api/maintenances', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },

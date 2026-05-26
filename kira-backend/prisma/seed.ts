@@ -8,10 +8,11 @@ const prisma = new PrismaClient({
 });
 
 async function main() {
-  console.log('🧹 Membersihkan seluruh database...');
+  console.log('Membersihkan seluruh database...');
   await prisma.assetPredictionHistory.deleteMany({});
   await prisma.maintenance.deleteMany({});
   await prisma.asset.deleteMany({});
+  await prisma.technician.deleteMany({});
   await prisma.companyMember.deleteMany({});
   await prisma.company.deleteMany({});
   await prisma.user.deleteMany({});
@@ -181,15 +182,59 @@ async function main() {
   await prisma.assetPredictionHistory.createMany({ data: predictionsToInsert });
 
   // ==========================================
-  console.log(`\n🎉 SEEDING MASSAL SELESAI!`);
-  console.log(`📊 Statistik Data yang Berhasil Disuntikkan:`);
+  // 7. GENERATE TECHNICIANS
+  // ==========================================
+  console.log('Menyiapkan 100 data Teknisi...');
+
+  const firstNames = [
+    'Ahmad', 'Budi', 'Candra', 'Dedi', 'Eko', 'Fajar', 'Gunawan', 'Hendra',
+    'Ivan', 'Joko', 'Kurniawan', 'Luthfi', 'Mulyadi', 'Nanang', 'Oki',
+    'Pramudya', 'Rahmat', 'Slamet', 'Tri', 'Ujang', 'Wahyu', 'Yudi',
+    'Agus', 'Bayu', 'Dimas', 'Firman', 'Gilang', 'Hasan', 'Irfan', 'Andi',
+    'Rudi', 'Suprapto', 'Teguh', 'Zaenal', 'Faris',
+  ];
+  const lastNames = [
+    'Santoso', 'Purnomo', 'Hidayat', 'Saputra', 'Wibowo', 'Prasetyo',
+    'Kurniawan', 'Susanto', 'Nugroho', 'Wahyudi', 'Setiawan', 'Widodo',
+    'Suryadi', 'Permana', 'Hartono', 'Gunawan', 'Wijaya', 'Sanjaya',
+    'Budiman', 'Raharjo',
+  ];
+  const specializations = [
+    'Mekanikal', 'Elektrikal', 'Sipil', 'HVAC',
+    'IT & Jaringan', 'Plumbing', 'Proteksi Kebakaran', 'Instrumentasi',
+  ];
+
+  const techniciansToInsert = [];
+  for (let i = 1; i <= 100; i++) {
+    const firstName = firstNames[i % firstNames.length];
+    const lastName = lastNames[i % lastNames.length];
+    const roll = Math.random();
+    const status = roll < 0.6 ? 'Tersedia' : roll < 0.85 ? 'Ditugaskan' : 'Tidak Aktif';
+
+    techniciansToInsert.push({
+      id: crypto.randomUUID(),
+      id_perusahaan: mainCompanyId,
+      name: `${firstName} ${lastName}`,
+      email: `teknisi${i}.${crypto.randomUUID().substring(0, 5)}@kira.com`,
+      phone: `08${String(Math.floor(100000000 + Math.random() * 900000000))}`,
+      specialization: specializations[i % specializations.length],
+      status,
+      experience_years: Math.floor(Math.random() * 15) + 1,
+    });
+  }
+  await prisma.technician.createMany({ data: techniciansToInsert });
+
+  // ==========================================
+  console.log('\nSEEDING MASSAL SELESAI!');
+  console.log('Statistik Data yang Berhasil Disuntikkan:');
   console.log(`  - Users                  : ${usersToInsert.length}`);
   console.log(`  - Companies              : ${companiesToInsert.length}`);
   console.log(`  - Company Members        : ${membersToInsert.length}`);
   console.log(`  - Assets                 : ${assetsToInsert.length}`);
   console.log(`  - Maintenance Records    : ${maintenancesToInsert.length}`);
   console.log(`  - RUL Predictions        : ${predictionsToInsert.length}`);
-  console.log(`-----------------------------------------------`);
+  console.log(`  - Technicians            : ${techniciansToInsert.length}`);
+  console.log('-----------------------------------------------');
 }
 
 main()

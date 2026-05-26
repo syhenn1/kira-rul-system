@@ -8,6 +8,8 @@ import Swal from 'sweetalert2';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import { apiFetch } from '@/lib/api';
+import { authApi } from '@/lib/auth';
 
 export default function AddAssetPage() {
   const router = useRouter();
@@ -20,7 +22,6 @@ export default function AddAssetPage() {
     brand: '',
     category: '',
     sub_category: '',
-    type: '',
     type: '',
     criticality_level: '',
   });
@@ -39,10 +40,10 @@ export default function AddAssetPage() {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const token = localStorage.getItem('kira_token');
-      const response = await fetch('http://localhost:3001/api/assets', {
+      const token = authApi.getToken();
+      const response = await apiFetch('/api/assets', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
@@ -50,9 +51,10 @@ export default function AddAssetPage() {
       });
       
       if (!response.ok) {
-        throw new Error('Failed to create asset');
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody?.error || `Server error ${response.status}`);
       }
-      
+
       const result = await response.json();
       await Swal.fire({
         title: 'Berhasil!',
@@ -66,7 +68,7 @@ export default function AddAssetPage() {
       console.error(error);
       Swal.fire({
         title: 'Terjadi Kesalahan',
-        text: 'Gagal menyimpan data aset ke server.',
+        text: (error as Error).message || 'Gagal menyimpan data aset ke server.',
         icon: 'error',
         confirmButtonColor: '#ef4444'
       });

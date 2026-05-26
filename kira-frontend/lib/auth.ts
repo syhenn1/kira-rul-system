@@ -1,9 +1,12 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_URL } from './api';
 
 export interface AuthUser {
   id: string;
   name: string;
   email: string;
+  profile_picture?: string | null;
+  phone?: string | null;
+  department?: string | null;
 }
 
 export interface AuthResponse {
@@ -40,6 +43,45 @@ export const authApi = {
 
   loginWithGoogle: () => {
     window.location.href = `${API_URL}/api/auth/google`;
+  },
+
+  getCurrentUser: async (): Promise<AuthUser> => {
+    const token = authApi.getToken();
+    if (!token) throw new Error('Not authenticated');
+
+    const res = await fetch(`${API_URL}/api/auth/me`, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error('Failed to fetch user profile');
+    }
+
+    return res.json();
+  },
+
+  updateProfile: async (profile: Partial<AuthUser>): Promise<AuthUser> => {
+    const token = authApi.getToken();
+    if (!token) throw new Error('Not authenticated');
+
+    const res = await fetch(`${API_URL}/api/auth/me`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(profile),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || 'Failed to update profile');
+    }
+
+    return res.json();
   },
 
   saveSession: (token: string, user: AuthUser) => {

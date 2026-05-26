@@ -149,29 +149,25 @@ def build_prompt(rows):
     teks_normal = "\n---\n".join(normal) if normal else "Tidak ada aset normal saat ini."
 
     instruction = (
-        "Anda adalah sistem AI yang bertugas membuat ringkasan kondisi aset untuk Dashboard Manajemen Eksekutif.\n\n"
-        "Tugas Anda adalah membuat ringkasan tingkat tinggi (high-level summary) sebanyak 1-2 kalimat dalam Bahasa Indonesia yang profesional dan objektif berdasarkan data yang disediakan.\n\n"
-        "Sistem backend Python telah membagi data aset menjadi dua kategori berdasarkan tingkat kegentingan (Rule-Based Priority Injection). Anda WAJIB mematuhi aturan pemrosesan berikut:\n\n"
-        "1. ATURAN PRIORITAS UTAMA:\n"
-        "   - Fokus utama ringkasan Anda WAJIB didasarkan pada data yang berada di bawah blok [PERTIMBAKAN UTAMA / PRIORITAS TINGGI].\n"
-        "   - Kalimat pertama ringkasan harus langsung menyoroti masalah utama dari blok prioritas ini.\n\n"
-        "2. ATURAN DATA PENDUKUNG:\n"
-        "   - Data di bawah blok [DATA ASET LAINNYA (KONDISI SEHAT/NORMAL)] hanya digunakan sebagai konteks pelengkap atau pembanding di kalimat kedua.\n"
-        "   - Jika blok [PERTIMBAKAN UTAMA] berisi pesan 'Tidak ada aset kritis saat ini', maka buatlah ringkasan positif yang menyatakan seluruh operasional aset perusahaan berjalan optimal.\n\n"
-        "3. ATURAN PEMBATASAN (CONSTRAINTS):\n"
-        "   - JANGAN menyebutkan nama aset atau merek aset secara spesifik (Gunakan kata ganti umum seperti 'terdapat komponen vital' atau 'beberapa unit kendaraan').\n"
-        "   - Akhiri ringkasan Anda dengan 1 rekomendasi tindakan yang tegas dan relevan dengan kondisi prioritas tersebut.\n"
+        "Anda adalah manajer aset senior yang menulis catatan harian kondisi aset untuk eksekutif perusahaan.\n\n"
+        "Tulis 2 kalimat ringkasan dalam Bahasa Indonesia yang terdengar seperti ditulis oleh manusia — lugas, langsung ke inti masalah, tanpa basa-basi.\n\n"
+        "Aturan wajib:\n"
+        "1. Mulai langsung dengan kondisi yang paling mendesak dari blok [PRIORITAS TINGGI]. Jangan buka dengan frasa seperti 'Berdasarkan data', 'Berikut adalah', 'Ringkasan menunjukkan', atau sejenisnya.\n"
+        "2. Gunakan kata ganti umum, bukan nama spesifik aset atau merek (contoh: 'sejumlah unit mekanikal', 'beberapa perangkat kategori electrical').\n"
+        "3. Kalimat kedua boleh menyebut kondisi aset yang normal sebagai konteks perbandingan, atau langsung berisi rekomendasi tindakan.\n"
+        "4. Jika tidak ada aset kritis, tulis secara singkat bahwa kondisi operasional aset perusahaan saat ini terpantau baik dan tidak ada tindakan mendesak yang diperlukan.\n"
+        "5. Jangan gunakan bullet point, angka berurutan, atau format markdown apapun.\n"
     )
-    
+
     prompt_data = (
-        f"[Hasil Feature Extraction NLP Eksplisit - Top Keywords]: {top_keywords}\n\n"
-        f"[PERTIMBAKAN UTAMA / PRIORITAS TINGGI]\n{teks_prioritas}\n\n"
-        f"[DATA ASET LAINNYA (KONDISI SEHAT/NORMAL)]\n{teks_normal}"
+        f"[Top Keywords dari data aset]: {top_keywords}\n\n"
+        f"[PRIORITAS TINGGI — aset yang memerlukan perhatian segera]\n{teks_prioritas}\n\n"
+        f"[KONDISI NORMAL — aset dengan performa baik]\n{teks_normal}"
     )
 
     messages = [
-        {"role": "system", "content": "You are a professional executive dashboard AI assistant."},
-        {"role": "user", "content": instruction + "\n\nBerikut adalah data terstruktur yang harus Anda rangkum:\n\n" + prompt_data},
+        {"role": "system", "content": "Kamu adalah manajer aset berpengalaman yang menulis laporan singkat kondisi aset dalam Bahasa Indonesia."},
+        {"role": "user", "content": instruction + "\n\nData aset:\n\n" + prompt_data},
     ]
     return messages, extracted_assets
 
