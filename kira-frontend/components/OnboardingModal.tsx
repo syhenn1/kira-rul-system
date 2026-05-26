@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, ReactNode } from 'react';
+import { useState, useEffect, useRef, ReactNode, ReactElement } from 'react';
 import {
   LayoutDashboard, Package, Wrench, Bell, ShieldCheck,
   X, ChevronRight, ChevronLeft, Lock,
@@ -222,7 +222,7 @@ interface StepDef {
   gradient: string;
   accentFrom: string;
   accentTo: string;
-  Illus: () => JSX.Element;
+  Illus: () => ReactElement;
   title: string;
   desc: string;
   hint: string;

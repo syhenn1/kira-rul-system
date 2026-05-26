@@ -4,8 +4,38 @@ import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
 import Link from 'next/link';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import TourOverlay from '@/components/TourOverlay';
+import Tooltip from '@/components/Tooltip';
 import Swal from 'sweetalert2';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+
+const TOUR_STEPS = [
+  {
+    target: 'schedule-btn',
+    title: 'Buat Jadwal Maintenance',
+    desc: 'Klik tombol ini untuk membuat jadwal maintenance baru — pilih aset, tentukan severity, dan tugaskan teknisi.',
+  },
+  {
+    target: 'maintenance-search',
+    title: 'Cari Maintenance',
+    desc: 'Cari record maintenance berdasarkan nama aset, tipe maintenance, atau kata kunci lainnya secara real-time.',
+  },
+  {
+    target: 'maintenance-status-filter',
+    title: 'Filter Status',
+    desc: 'Filter berdasarkan status pekerjaan: Scheduled (terjadwal), In Progress (dikerjakan), atau Completed (selesai).',
+  },
+  {
+    target: 'maintenance-severity-filter',
+    title: 'Filter Severity',
+    desc: 'Filter berdasarkan tingkat keparahan: Critical/High (segera), Medium (menengah), atau Low (dapat ditunda).',
+  },
+  {
+    target: 'maintenance-table',
+    title: 'Tabel Maintenance',
+    desc: 'Setiap baris menampilkan aset terkait, tipe, severity, status, jadwal, biaya, dan prediksi RUL terbaru. Klik "View" untuk detail lengkap dan timeline.',
+  },
+];
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -361,62 +391,74 @@ export default function MaintenancePage() {
         <div className="flex-1 ml-64 p-8">
           <Topbar />
 
-          <div className="flex items-center justify-between mt-8">
+          <div className="flex items-center justify-between mt-8 animate-[enterUp_0.5s_ease-out_both]">
             <div>
-              <h1 className="text-4xl font-bold text-gray-900">
-                Maintenance
-              </h1>
-
-              <p className="text-gray-500 mt-2">
-                Manage asset maintenance schedules and requests
+              <h1 className="text-3xl font-bold text-gray-900">Maintenance</h1>
+              <p className="text-gray-500 mt-1 text-sm">
+                Kelola jadwal dan permintaan maintenance aset
               </p>
             </div>
 
-            <Link
-              href="/maintenance/add"
-              className="bg-blue-600 hover:bg-blue-700 transition text-white px-5 py-3 rounded-xl font-medium"
-            >
-              + Schedule
-            </Link>
+            <Tooltip content="Buat jadwal maintenance baru untuk aset" position="left">
+              <Link
+                data-tour="schedule-btn"
+                href="/maintenance/add"
+                className="bg-blue-600 hover:bg-blue-700 transition text-white px-5 py-3 rounded-xl font-medium shadow-lg shadow-blue-600/20 hover:-translate-y-0.5 active:translate-y-0"
+              >
+                + Schedule
+              </Link>
+            </Tooltip>
           </div>
 
-          <div className="bg-white rounded-2xl p-6 shadow-sm mt-8">
-            <div className="flex flex-col lg:flex-row gap-4">
-              <input
-                type="text"
-                placeholder="Search..."
-                value={search}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="flex-1 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
-              />
+          <div className="bg-white rounded-2xl px-5 py-4 shadow-sm mt-6 animate-[enterUp_0.5s_0.1s_ease-out_both]">
+            <div className="flex flex-col lg:flex-row gap-3">
+              <Tooltip content="Cari berdasarkan nama aset atau tipe maintenance" position="bottom">
+                <input
+                  data-tour="maintenance-search"
+                  type="text"
+                  placeholder="Cari aset atau tipe maintenance..."
+                  value={search}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 text-sm"
+                />
+              </Tooltip>
 
-              <select
-                value={statusFilter}
-                onChange={(e) => handleStatusChange(e.target.value)}
-                className="border border-gray-200 rounded-xl px-4 py-3 text-gray-600"
-              >
-                <option value="">All Status</option>
-                <option value="Scheduled">Scheduled</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Completed">Completed</option>
-              </select>
+              <Tooltip content="Filter berdasarkan status pekerjaan maintenance" position="bottom">
+                <select
+                  data-tour="maintenance-status-filter"
+                  value={statusFilter}
+                  onChange={(e) => handleStatusChange(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-4 py-2.5 text-gray-600 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Semua Status</option>
+                  <option value="Scheduled">Scheduled</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </Tooltip>
 
-              <select
-                value={severityFilter}
-                onChange={(e) => handleSeverityChange(e.target.value)}
-                className="border border-gray-200 rounded-xl px-4 py-3 text-gray-600"
-              >
-                <option value="">All Severity</option>
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Critical">Critical</option>
-              </select>
+              <Tooltip content="Filter berdasarkan tingkat keparahan" position="bottom">
+                <select
+                  data-tour="maintenance-severity-filter"
+                  value={severityFilter}
+                  onChange={(e) => handleSeverityChange(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-4 py-2.5 text-gray-600 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Semua Severity</option>
+                  <option value="Low">Low</option>
+                  <option value="Medium">Medium</option>
+                  <option value="High">High</option>
+                  <option value="Critical">Critical</option>
+                </select>
+              </Tooltip>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 mt-6">
-            <div className="xl:col-span-3 bg-white rounded-2xl p-6 shadow-sm overflow-x-auto">
+          <div className="grid grid-cols-1 gap-6 mt-4 animate-[enterUp_0.5s_0.18s_ease-out_both]">
+            <div
+              className="xl:col-span-3 bg-white rounded-2xl p-6 shadow-sm overflow-x-auto"
+              data-tour="maintenance-table"
+            >
               {error ? (
                 <div className="rounded-xl bg-red-50 border border-red-100 p-5 text-red-600">
                   {error}
@@ -446,14 +488,15 @@ export default function MaintenancePage() {
                     </thead>
 
                     <tbody>
-                      {maintenances.map((item) => {
+                      {maintenances.map((item, i) => {
                         const latestPrediction = item.prediction_history?.[0];
                         const currentStatus = getCurrentStatus(item);
 
                         return (
                           <tr
                             key={item.id}
-                            className="border-b border-gray-50 hover:bg-gray-50 transition"
+                            className="stagger-item border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                            style={{ animationDelay: `${i * 35}ms` }}
                           >
                             <td className="py-5 font-medium text-gray-800">
                               {item.asset?.asset_name || '-'}
@@ -488,12 +531,14 @@ export default function MaintenancePage() {
                             </td>
 
                             <td>
-                              <button
-                                onClick={() => setSelectedMaintenance(item)}
-                                className="text-blue-600 hover:text-blue-700 font-medium"
-                              >
-                                View
-                              </button>
+                              <Tooltip content="Lihat detail dan timeline maintenance" position="left">
+                                <button
+                                  onClick={() => setSelectedMaintenance(item)}
+                                  className="text-blue-600 hover:text-blue-700 font-medium text-sm transition"
+                                >
+                                  View
+                                </button>
+                              </Tooltip>
                             </td>
                           </tr>
                         );
@@ -716,29 +761,35 @@ function MaintenanceDetailModal({
         </div>
 
         <div className="px-6 py-5 border-t border-gray-100 bg-white flex flex-col md:flex-row justify-end gap-3">
-          <button
-            onClick={() => onAction('Edit Maintenance', maintenance)}
-            className="px-5 py-3 rounded-xl border border-blue-600 text-blue-600 hover:bg-blue-50 transition font-medium"
-          >
-            Edit Maintenance
-          </button>
-          <button
-            onClick={onAddLog}
-            className="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 transition text-white font-medium"
-          >
-            Add Status Log
-          </button>
-          <button
-            onClick={() => onAction('Delete Maintenance', maintenance)}
-            className="px-5 py-3 rounded-xl bg-red-500 hover:bg-red-600 transition text-white font-medium"
-          >
-            Delete Maintenance
-          </button>
+          <Tooltip content="Ubah detail jadwal dan informasi maintenance" position="top">
+            <button
+              onClick={() => onAction('Edit Maintenance', maintenance)}
+              className="px-5 py-3 rounded-xl border border-blue-600 text-blue-600 hover:bg-blue-50 transition font-medium"
+            >
+              Edit Maintenance
+            </button>
+          </Tooltip>
+          <Tooltip content="Tambahkan update status terbaru ke timeline" position="top">
+            <button
+              onClick={onAddLog}
+              className="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 transition text-white font-medium"
+            >
+              Add Status Log
+            </button>
+          </Tooltip>
+          <Tooltip content="Hapus record maintenance ini secara permanen" position="top">
+            <button
+              onClick={() => onAction('Delete Maintenance', maintenance)}
+              className="px-5 py-3 rounded-xl bg-red-500 hover:bg-red-600 transition text-white font-medium"
+            >
+              Delete Maintenance
+            </button>
+          </Tooltip>
           <button
             onClick={onClose}
             className="px-5 py-3 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition font-medium"
           >
-            Close
+            Tutup
           </button>
         </div>
       </div>

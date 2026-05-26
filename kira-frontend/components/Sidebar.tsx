@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import React, { useState } from 'react';
 
 import {
   LayoutDashboard,
@@ -19,7 +19,14 @@ import {
   List,
 } from 'lucide-react';
 
-const menus = [
+type MenuItem = {
+  name: string;
+  href: string;
+  icon: React.ElementType;
+  children?: { name: string; href: string; icon?: React.ElementType }[];
+};
+
+const menus: MenuItem[] = [
   {
     name: 'Dashboard',
     icon: LayoutDashboard,

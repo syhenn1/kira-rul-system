@@ -40,7 +40,7 @@ export default function WelcomeHeader() {
     <div className="flex flex-col md:flex-row md:items-end justify-between">
       <div>
         <h1 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">
-          {greeting}, Admin! 👋
+          {greeting}, Admin!
         </h1>
         <p className="text-gray-500 mt-2 text-base md:text-lg">
           Berikut adalah ringkasan performa dan kondisi aset Anda hari ini.

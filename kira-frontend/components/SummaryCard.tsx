@@ -111,7 +111,7 @@ export default function SummaryCard() {
         )}
       </div>
 
-      <div className="relative z-10 mt-5 min-h-[120px]">
+      <div className="relative z-10 mt-5 min-h-30">
         {error ? (
           <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm border border-red-100">
             {error}
@@ -139,30 +139,26 @@ export default function SummaryCard() {
                 <h3 className="text-xs font-semibold text-blue-200 uppercase tracking-wider mb-3">
                   Aset Terkait (Quick Access)
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {assets.map((asset) => (
+                <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
+                  {assets.slice(0, 5).map((asset) => (
                     <Link
                       key={asset.id}
                       href={`/assets/${asset.id}`}
-                      className="group flex flex-col p-3 rounded-xl bg-white/10 text-white border border-white/20 hover:bg-white/20 hover:-translate-y-1 transition-all duration-300 shadow-sm backdrop-blur-md"
+                      className="group shrink-0 w-48 flex flex-col p-3 rounded-xl bg-white/10 text-white border border-white/20 hover:bg-white/20 transition-all duration-300 shadow-sm backdrop-blur-md"
                     >
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-                          </div>
-                          <div>
-                            <p className="font-semibold text-sm leading-tight text-white line-clamp-1" title={asset.name}>{asset.name}</p>
-                            <p className="text-[11px] text-blue-200 mt-0.5 line-clamp-1">{asset.brand} • {asset.category}</p>
-                          </div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
                         </div>
+                        <p className="font-semibold text-xs leading-tight text-white truncate" title={asset.name}>{asset.name}</p>
                       </div>
-                      <div className="flex justify-between items-center mt-auto pt-2 border-t border-white/10">
-                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${asset.status?.toLowerCase() === 'scrap' || asset.status?.toLowerCase() === 'maintenance' ? 'bg-red-500/30 text-red-100' : 'bg-green-500/30 text-green-100'}`}>
-                          {asset.status || 'UNKNOWN'}
+                      <p className="text-[10px] text-blue-200 truncate mb-2">{asset.brand} • {asset.category}</p>
+                      <div className="flex justify-between items-center pt-2 border-t border-white/10">
+                        <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-full ${asset.status?.toLowerCase() === 'scrap' || asset.status?.toLowerCase() === 'maintenance' ? 'bg-red-500/30 text-red-100' : 'bg-green-500/30 text-green-100'}`}>
+                          {asset.status || '—'}
                         </span>
-                        <span className="text-xs font-medium bg-blue-900/50 text-blue-100 px-2 py-1 rounded-md border border-blue-800/50">
-                          RUL: {asset.pred_rul !== null && asset.pred_rul !== undefined ? `${asset.pred_rul} bln` : 'N/A'}
+                        <span className="text-[10px] font-medium bg-blue-900/50 text-blue-100 px-1.5 py-0.5 rounded border border-blue-800/50">
+                          {asset.pred_rul != null ? `${asset.pred_rul} bln` : 'N/A'}
                         </span>
                       </div>
                     </Link>

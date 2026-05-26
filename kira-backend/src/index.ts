@@ -1189,7 +1189,7 @@ app.get('/api/dashboard', authenticateJWT, async (req: Request, res: Response) =
         high: Number(alerts.high) || 0,
         watch: Number(alerts.watch) || 0,
       },
-      upcoming_maintenances: upcoming.map((m) => ({
+      upcoming_maintenances: upcoming.map((m: any) => ({
         id: m.id,
         asset_name: m.asset.asset_name,
         scheduled_date: m.scheduled_date,
@@ -1197,7 +1197,7 @@ app.get('/api/dashboard', authenticateJWT, async (req: Request, res: Response) =
         status: m.status,
         maintenance_type: m.maintenance_type,
       })),
-      recent_maintenances: recent.map((m) => ({
+      recent_maintenances: recent.map((m: any) => ({
         id: m.id,
         asset_name: m.asset.asset_name,
         maintenance_type: m.maintenance_type,
@@ -1263,7 +1263,7 @@ app.get('/api/reports/maintenance', authenticateJWT, async (req: Request, res: R
     });
 
     return res.status(200).json({
-      maintenances: maintenances.map((m) => ({
+      maintenances: maintenances.map((m: any) => ({
         id: m.id,
         asset_name: m.asset.asset_name,
         category: m.asset.category,
