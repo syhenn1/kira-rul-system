@@ -5,13 +5,14 @@ import { useRouter } from 'next/navigation';
 import Swal from 'sweetalert2';
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return !!localStorage.getItem('kira_token');
-  });
+  const [mounted, setMounted] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
+    setMounted(true);
+
     const token = localStorage.getItem('kira_token');
     if (!token) {
       Swal.fire({
@@ -27,9 +28,15 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     } else {
       setIsAuthenticated(true);
     }
+
+    setAuthChecked(true);
   }, [router]);
 
-  if (!isAuthenticated) return null;
+  if (!mounted || !authChecked || !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-100" />
+    );
+  }
 
   return <>{children}</>;
 }
