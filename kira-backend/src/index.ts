@@ -32,9 +32,108 @@ app.use('/api/auth', authRoutes);
 app.get('/api/assets', authenticateJWT, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
+    const { search = '', status = '', page = '1', limit = '10' } = req.query;
 
-    const assets = await prisma.asset.findMany({
+    const pageNumber = Math.max(1, parseInt(String(page), 10) || 1);
+    const limitNumber = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 10));
+    const skip = (pageNumber - 1) * limitNumber;
+    const searchText = String(search).trim();
+    const statusText = String(status).trim();
+
+    const companyWhere = {
+      OR: [
+        { owner_id: userId },
+        { members: { some: { id_user: userId } } },
+      ],
+    };
+
+    const assetWhere: any = { company: companyWhere };
+
+    if (searchText) {
+      assetWhere.OR = [
+        { asset_name: { contains: searchText, mode: 'insensitive' } },
+        { brand: { contains: searchText, mode: 'insensitive' } },
+        { category: { contains: searchText, mode: 'insensitive' } },
+        { type: { contains: searchText, mode: 'insensitive' } },
+      ];
+    }
+
+    if (statusText && statusText !== 'All Status') {
+      assetWhere.status = statusText;
+    }
+
+    const [total, assets, statusCounts] = await Promise.all([
+      prisma.asset.count({ where: assetWhere }),
+      prisma.asset.findMany({
+        where: assetWhere,
+        orderBy: { asset_name: 'asc' },
+        skip,
+        take: limitNumber,
+        include: {
+          gedung: { select: { nama: true, kode: true } },
+          prediction_history: {
+            orderBy: { recorded_at: 'desc' },
+            take: 1,
+            select: { predicted_rul: true, recorded_at: true },
+          },
+          maintenances: {
+            orderBy: { scheduled_date: 'desc' },
+            take: 1,
+            select: { scheduled_date: true, status: true },
+          },
+        },
+      }),
+      prisma.asset.groupBy({
+        by: ['status'],
+        where: { company: companyWhere },
+        _count: { id: true },
+      }),
+    ]);
+
+    const byStatus = (statusCounts as any[]).reduce((acc: Record<string, number>, item: any) => {
+      acc[item.status] = item._count.id;
+      return acc;
+    }, {});
+
+    const mappedAssets = (assets as any[]).map((a) => ({
+      id: a.id,
+      asset_name: a.asset_name,
+      brand: a.brand,
+      category: a.category,
+      sub_category: a.sub_category,
+      type: a.type,
+      status: a.status,
+      criticality_level: a.criticality_level,
+      purchase_date: a.purchase_date,
+      gedung: a.gedung,
+      predicted_rul: a.prediction_history[0]?.predicted_rul ?? null,
+      last_action: a.maintenances[0]?.scheduled_date ?? a.purchase_date,
+    }));
+
+    return res.status(200).json({
+      data: mappedAssets,
+      stats: { total, by_status: byStatus },
+      pagination: {
+        page: pageNumber,
+        limit: limitNumber,
+        total,
+        totalPages: Math.ceil(total / limitNumber),
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching assets:', error);
+    return res.status(500).json({ error: 'Failed to fetch assets', details: (error as Error).message });
+  }
+});
+
+app.get('/api/assets/:id', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const { id } = req.params;
+
+    const asset = await prisma.asset.findFirst({
       where: {
+        id,
         company: {
           OR: [
             { owner_id: userId },
@@ -42,23 +141,116 @@ app.get('/api/assets', authenticateJWT, async (req: Request, res: Response) => {
           ],
         },
       },
-      orderBy: { asset_name: 'asc' },
-      select: {
-        id: true,
-        asset_name: true,
-        brand: true,
-        category: true,
-        sub_category: true,
-        type: true,
-        status: true,
-        criticality_level: true,
+      include: {
+        gedung: { select: { id: true, nama: true, kode: true } },
+        prediction_history: {
+          orderBy: { recorded_at: 'desc' },
+          take: 5,
+        },
+        maintenances: {
+          orderBy: { scheduled_date: 'desc' },
+          take: 20,
+          include: {
+            user: { select: { id: true, name: true, email: true } },
+            logs: {
+              orderBy: { created_at: 'desc' },
+              take: 3,
+            },
+          },
+        },
       },
     });
 
-    return res.status(200).json({ data: assets });
+    if (!asset) {
+      return res.status(404).json({ error: 'Asset not found or inaccessible' });
+    }
+
+    return res.status(200).json({
+      data: {
+        ...(asset as any),
+        predicted_rul: (asset as any).prediction_history[0]?.predicted_rul ?? null,
+        maintenance_count: (asset as any).maintenances.length,
+      },
+    });
   } catch (error) {
-    console.error('Error fetching assets:', error);
-    return res.status(500).json({ error: 'Failed to fetch assets', details: (error as Error).message });
+    console.error('Error fetching asset detail:', error);
+    return res.status(500).json({ error: 'Failed to fetch asset', details: (error as Error).message });
+  }
+});
+
+app.patch('/api/assets/:id', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const { id } = req.params;
+    const { asset_name, purchase_date, brand, category, sub_category, type, criticality_level, status, gedung_id } = req.body;
+
+    const asset = await prisma.asset.findFirst({
+      where: { id, company: { owner_id: userId } },
+      select: { id: true },
+    });
+
+    if (!asset) {
+      return res.status(404).json({ error: 'Asset not found or inaccessible' });
+    }
+
+    const hasField = (f: string) => Object.prototype.hasOwnProperty.call(req.body, f);
+    const updateData: any = {};
+    if (hasField('asset_name') && asset_name) updateData.asset_name = asset_name;
+    if (hasField('purchase_date') && purchase_date) updateData.purchase_date = new Date(purchase_date);
+    if (hasField('brand')) updateData.brand = brand;
+    if (hasField('category')) updateData.category = category;
+    if (hasField('sub_category')) updateData.sub_category = sub_category;
+    if (hasField('type')) updateData.type = type;
+    if (hasField('criticality_level')) updateData.criticality_level = criticality_level;
+    if (hasField('status')) updateData.status = status;
+    if (hasField('gedung_id')) updateData.gedung_id = gedung_id || null;
+
+    const updated = await prisma.asset.update({
+      where: { id },
+      data: updateData,
+      include: { gedung: { select: { id: true, nama: true, kode: true } } },
+    });
+
+    return res.status(200).json({ message: 'Asset berhasil diperbarui', data: updated });
+  } catch (error) {
+    console.error('Error updating asset:', error);
+    return res.status(500).json({ error: 'Failed to update asset', details: (error as Error).message });
+  }
+});
+
+app.delete('/api/assets/:id', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const { id } = req.params;
+
+    const asset = await prisma.asset.findFirst({
+      where: { id, company: { owner_id: userId } },
+      select: { id: true },
+    });
+
+    if (!asset) {
+      return res.status(404).json({ error: 'Asset not found or inaccessible' });
+    }
+
+    await prisma.$transaction(async (tx: any) => {
+      const maintenances = await tx.maintenance.findMany({
+        where: { id_asset: id },
+        select: { id: true },
+      });
+      const mIds = maintenances.map((m: any) => m.id);
+      if (mIds.length > 0) {
+        await tx.maintenanceLog.deleteMany({ where: { id_maintenance: { in: mIds } } });
+        await tx.assetPredictionHistory.deleteMany({ where: { id_maintenance: { in: mIds } } });
+      }
+      await tx.assetPredictionHistory.deleteMany({ where: { id_asset: id } });
+      await tx.maintenance.deleteMany({ where: { id_asset: id } });
+      await tx.asset.delete({ where: { id } });
+    });
+
+    return res.status(200).json({ message: 'Asset berhasil dihapus' });
+  } catch (error) {
+    console.error('Error deleting asset:', error);
+    return res.status(500).json({ error: 'Failed to delete asset', details: (error as Error).message });
   }
 });
 
@@ -118,7 +310,8 @@ app.post('/api/assets', authenticateJWT, async (req: Request, res: Response) => 
     // Coba memprediksi RUL untuk asset baru
     let predicted_rul = parseInt(finalInitialUsefulLife as string) || 0;
     try {
-      const aiEngineUrl = process.env.AI_ENGINE_URL || 'http://localhost:8000/predict';
+      const aiEngineBase = (process.env.AI_ENGINE_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const aiEngineUrl = `${aiEngineBase}/predict`;
       const aiResponse = await fetch(aiEngineUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -175,7 +368,8 @@ app.post('/api/assets', authenticateJWT, async (req: Request, res: Response) => 
 // Endpoint untuk prediksi RUL
 app.post('/api/predict-rul', async (req: Request, res: Response) => {
   try {
-    const aiEngineUrl = process.env.AI_ENGINE_URL || 'http://localhost:8000/predict';
+    const aiEngineBase = (process.env.AI_ENGINE_URL || 'http://localhost:8000').replace(/\/$/, '');
+    const aiEngineUrl = `${aiEngineBase}/predict`;
 
     const response = await fetch(aiEngineUrl, {
       method: 'POST',
@@ -414,8 +608,9 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
     let predicted_rul = asset.initial_useful_life;
     
     try {
-      const aiEngineUrl = process.env.AI_ENGINE_URL || 'http://localhost:8000/predict';
-      
+      const aiEngineBase = (process.env.AI_ENGINE_URL || 'http://localhost:8000').replace(/\/$/, '');
+      const aiEngineUrl = `${aiEngineBase}/predict`;
+
       // Mengirim payload ke AI engine dengan nilai agregat aktual
       const aiResponse = await fetch(aiEngineUrl, {
         method: 'POST',
@@ -757,7 +952,8 @@ app.post('/api/maintenances/:id/logs', authenticateJWT, async (req: Request, res
       let predicted_rul = maintenance.asset.initial_useful_life;
 
       try {
-        const aiEngineUrl = process.env.AI_ENGINE_URL || 'http://localhost:8000/predict';
+        const aiEngineBase = (process.env.AI_ENGINE_URL || 'http://localhost:8000').replace(/\/$/, '');
+        const aiEngineUrl = `${aiEngineBase}/predict`;
         const aiResponse = await fetch(aiEngineUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -925,7 +1121,8 @@ app.post('/api/summarize', authenticateJWT, async (req: Request, res: Response) 
     }
     const company_id = userCompany.id;
 
-    const aiEngineUrl = process.env.AI_ENGINE_URL || 'http://localhost:8000/summarize';
+    const aiEngineBase = (process.env.AI_ENGINE_URL || 'http://localhost:8000').replace(/\/$/, '');
+    const aiEngineUrl = `${aiEngineBase}/summarize`;
     const response = await fetch(aiEngineUrl, {
       method: 'POST',
       headers: {
