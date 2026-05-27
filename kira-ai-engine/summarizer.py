@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 import psycopg2
 from urllib.parse import urlsplit
 import requests
-import json
 
 load_dotenv()
 
@@ -34,12 +33,17 @@ def fetch_asset_aggregates(company_id: str, limit: int = 20):
     )
     cur = conn.cursor()
     sql = """
-    SELECT a.id, a.asset_name, a.brand, a.category, a.status,
+    SELECT a.id, a.asset_name,
+           COALESCE(m.nama, 'Generic') AS brand,
+           COALESCE(k.nama, 'Mekanik') AS category,
+           a.status,
            aph.maintenance_count, aph.average_down_time, aph.total_maintenance_cost,
            aph.max_maintenance_cost, aph.mode_severity, aph.predicted_rul, aph.recorded_at
     FROM asset_prediction_history aph
     JOIN assets a ON aph.id_asset = a.id
     JOIN companies c ON a.id_perusahaan = c.id
+    LEFT JOIN merk m ON m.id = a.merk_id
+    LEFT JOIN kategori k ON k.id = a.kategori_id
     WHERE c.id = %s
     ORDER BY aph.recorded_at DESC
     LIMIT %s
@@ -172,6 +176,35 @@ def build_prompt(rows):
     return messages, extracted_assets
 
 
+def _rule_based_summary(rows) -> str:
+    """Fallback: generate a plain-text summary from the data without an LLM."""
+    total = len(rows)
+    kritis = [r for r in rows if r[10] is not None and r[10] < 12]
+    normal = total - len(kritis)
+    if not kritis:
+        return (
+            f"Kondisi operasional {total} aset perusahaan saat ini terpantau baik — "
+            "tidak ada unit yang memerlukan tindakan mendesak. "
+            "Lanjutkan program maintenance preventif sesuai jadwal yang telah ditetapkan."
+        )
+    categories = list({r[3] for r in kritis})
+    cat_str = " dan ".join(categories[:2])
+    return (
+        f"Terdapat {len(kritis)} unit aset kategori {cat_str} yang memerlukan perhatian segera "
+        f"dengan sisa umur di bawah 12 bulan. "
+        f"Dari total {total} aset yang dipantau, {normal} unit lainnya masih beroperasi dalam kondisi normal."
+    )
+
+
+# Models to try in order; format: (model_id, provider_or_None)
+_MODEL_CANDIDATES = [
+    ("meta-llama/Llama-3.1-8B-Instruct", "novita"),
+    ("meta-llama/Llama-3.1-8B-Instruct", "sambanova"),
+    ("Qwen/Qwen2.5-7B-Instruct", None),
+    ("HuggingFaceH4/zephyr-7b-beta", None),
+]
+
+
 def summarize_company_assets(company_id: str, limit: int = 20, temperature: float = 0.2):
     HF_TOKEN = os.getenv("HF_TOKEN")
     if not HF_TOKEN:
@@ -179,29 +212,41 @@ def summarize_company_assets(company_id: str, limit: int = 20, temperature: floa
 
     rows = fetch_asset_aggregates(company_id, limit)
     if not rows:
-        return "Tidak ada data untuk diringkas."
+        return {"summary": "Tidak ada data aset untuk diringkas.", "assets": []}
 
     messages, assets_data = build_prompt(rows)
     url = "https://router.huggingface.co/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
-    payload = {
-        "model": "meta-llama/Llama-3.1-8B-Instruct:novita",
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": 300,
-    }
-    response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=60)
-    response.raise_for_status()
-    data = response.json()
-    # HF router returns: {"choices":[{"message":{"role":"assistant","content":"..."}, ...}]}
-    content = data["choices"][0]["message"]["content"]
-    
+
+    last_error = None
+    for model_id, provider in _MODEL_CANDIDATES:
+        payload = {
+            "model": model_id,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": 300,
+        }
+        if provider:
+            payload["provider"] = provider
+
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            response.raise_for_status()
+            data = response.json()
+            content = data["choices"][0]["message"]["content"].strip()
+            return {"summary": content, "assets": assets_data}
+        except Exception as e:
+            last_error = e
+            continue  # try next model
+
+    # All models failed — return rule-based summary so the card still shows something
+    print(f"All LLM candidates failed (last error: {last_error}). Falling back to rule-based summary.")
     return {
-        "summary": content,
-        "assets": assets_data
+        "summary": _rule_based_summary(rows),
+        "assets": assets_data,
     }
 
 

@@ -15,8 +15,6 @@ import {
   Settings,
   ChevronDown,
   Building2,
-  Plus,
-  List,
 } from 'lucide-react';
 
 type MenuItem = {
@@ -36,10 +34,6 @@ const menus: MenuItem[] = [
     name: 'Assets',
     icon: Boxes,
     href: '/assets',
-    children: [
-      { name: 'List Assets', href: '/assets', icon: List },
-      { name: 'Add Asset', href: '/assets/add', icon: Plus },
-    ],
   },
   {
     name: 'Maintenance',

@@ -26,6 +26,18 @@ app.use(passport.initialize());
 
 const PORT = process.env.PORT || 3001;
 
+// ── Helper: find user's company (owner OR member) ────────────────────────────
+async function findUserCompany(userId: string) {
+  return prisma.company.findFirst({
+    where: {
+      OR: [
+        { owner_id: userId },
+        { members: { some: { id_user: userId } } },
+      ],
+    },
+  });
+}
+
 // Auth routes
 app.use('/api/auth', authRoutes);
 
@@ -141,23 +153,18 @@ app.get('/api/assets/:id', authenticateJWT, async (req: Request, res: Response) 
           ],
         },
       },
-      include: {
-        gedung: { select: { id: true, nama: true, kode: true } },
-        prediction_history: {
-          orderBy: { recorded_at: 'desc' },
-          take: 5,
-        },
-        maintenances: {
-          orderBy: { scheduled_date: 'desc' },
-          take: 20,
-          include: {
-            user: { select: { id: true, name: true, email: true } },
-            logs: {
-              orderBy: { created_at: 'desc' },
-              take: 3,
-            },
-          },
-        },
+      orderBy: { asset_name: 'asc' },
+      select: {
+        id: true,
+        asset_name: true,
+        status: true,
+        criticality_level: true,
+        gedung_id: true,
+        gedung:      { select: { id: true, nama: true } },
+        merk:        { select: { id: true, kode: true, nama: true } },
+        kategori:    { select: { id: true, kode: true, nama: true } },
+        subKategori: { select: { id: true, kode: true, nama: true } },
+        tipe:        { select: { id: true, kode: true, nama: true } },
       },
     });
 
@@ -254,61 +261,102 @@ app.delete('/api/assets/:id', authenticateJWT, async (req: Request, res: Respons
   }
 });
 
+// GET /api/lookup/merk|kategori|sub_kategori|tipe
+app.get('/api/lookup/:table', authenticateJWT, async (req: Request, res: Response) => {
+  const { table } = req.params;
+  try {
+    let data: any[];
+    switch (table) {
+      case 'merk':         data = await prisma.merk.findMany({ orderBy: { nama: 'asc' } }); break;
+      case 'kategori':     data = await prisma.kategori.findMany({ orderBy: { nama: 'asc' } }); break;
+      case 'sub_kategori': data = await prisma.subKategori.findMany({ orderBy: { nama: 'asc' } }); break;
+      case 'tipe':         data = await prisma.tipe.findMany({ orderBy: { nama: 'asc' } }); break;
+      default: return res.status(400).json({ error: 'Invalid lookup table' });
+    }
+    return res.status(200).json({ data });
+  } catch (error) {
+    console.error(`Error fetching lookup ${table}:`, error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 // API endpoint untuk menambahkan asset
 app.post('/api/assets', authenticateJWT, async (req: Request, res: Response) => {
   try {
     const {
       asset_name,
       purchase_date,
-      initial_useful_life,
       status,
-      id_perusahaan,
-      brand,
-      category,
-      sub_category,
-      type,
       criticality_level,
-      gedung_id
+      gedung_id,
+      merk_id,
+      kategori_id,
+      sub_kategori_id,
+      tipe_id,
     } = req.body;
 
-    // Pastikan data yang diperlukan ada
     if (!asset_name || !purchase_date) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Default values for fields removed from frontend
-    const finalInitialUsefulLife = initial_useful_life !== undefined ? initial_useful_life : 0;
     const finalStatus = status || 'Active';
 
-    // Dapatkan company id dari user yang sedang login
+    const userId = (req as any).user.id;
     const userCompany = await prisma.company.findFirst({
-      where: { owner_id: (req as any).user.id },
+      where: {
+        OR: [
+          { owner_id: userId },
+          { members: { some: { id_user: userId } } },
+        ],
+      },
     });
 
     if (!userCompany) {
-      return res.status(400).json({ error: 'User does not belong to any company' });
+      return res.status(400).json({ error: 'User does not belong to any company. Please contact your administrator.' });
     }
-    
-    let companyId = userCompany.id;
+
+    const companyId = userCompany.id;
+
+    // Resolve names from FK IDs for AI engine call (not stored in assets table)
+    const [merkRow, kategoriRow, subKategoriRow, tipeRow] = await Promise.all([
+      merk_id        ? prisma.merk.findUnique({ where: { id: merk_id } })               : null,
+      kategori_id    ? prisma.kategori.findUnique({ where: { id: kategori_id } })        : null,
+      sub_kategori_id? prisma.subKategori.findUnique({ where: { id: sub_kategori_id } }) : null,
+      tipe_id        ? prisma.tipe.findUnique({ where: { id: tipe_id } })                : null,
+    ]);
+
+    // Fallback RUL saat AI tidak tersedia — berdasarkan tingkat kekritisan (dalam hari)
+    const criticalityFallbackRUL: Record<string, number> = {
+      'Critical': 90,
+      'Major':    180,
+      'Minor':    365,
+    };
+    const finalCriticality = criticality_level || 'Minor';
+    const fallbackRUL = criticalityFallbackRUL[finalCriticality] ?? 365;
 
     const newAsset = await prisma.asset.create({
       data: {
         asset_name,
         purchase_date: new Date(purchase_date),
-        initial_useful_life: parseInt(finalInitialUsefulLife as string) || 0,
-        brand: brand || 'Generic',
-        category: category || 'Mechanical',
-        sub_category: sub_category || 'General',
-        type: type || 'General Equipment',
-        criticality_level: criticality_level || 'Medium',
+        initial_useful_life: fallbackRUL,          // simpan fallback sebagai useful life awal
+        criticality_level: finalCriticality,
         status: finalStatus,
         company: { connect: { id: companyId } },
-        ...(gedung_id ? { gedung: { connect: { id: gedung_id } } } : {}),
-      }
+        ...(gedung_id       ? { gedung:      { connect: { id: gedung_id } } }       : {}),
+        ...(merk_id         ? { merk:        { connect: { id: merk_id } } }         : {}),
+        ...(kategori_id     ? { kategori:    { connect: { id: kategori_id } } }     : {}),
+        ...(sub_kategori_id ? { subKategori: { connect: { id: sub_kategori_id } } } : {}),
+        ...(tipe_id         ? { tipe:        { connect: { id: tipe_id } } }         : {}),
+      },
     });
 
-    // Coba memprediksi RUL untuk asset baru
-    let predicted_rul = parseInt(finalInitialUsefulLife as string) || 0;
+    // Resolve gedung nama for AI (optional enrichment)
+    const gedungRow = gedung_id
+      ? await (prisma as any).gedung.findUnique({ where: { id: gedung_id }, select: { nama: true } })
+      : null;
+
+    // Prediksi RUL — fallback ke nilai berdasarkan kekritisan jika AI tidak tersedia
+    let predicted_rul = fallbackRUL;
     try {
       const aiEngineBase = (process.env.AI_ENGINE_URL || 'http://localhost:8000').replace(/\/$/, '');
       const aiEngineUrl = `${aiEngineBase}/predict`;
@@ -316,42 +364,51 @@ app.post('/api/assets', authenticateJWT, async (req: Request, res: Response) => 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          merek: newAsset.brand,
-          kategori: newAsset.category,
-          sub_kategori: newAsset.sub_category,
-          tipe: newAsset.type,
-          tingkat_kekritisan: newAsset.criticality_level,
-          count_nama_aset: 0,
-          average_down_time: 0.0,
-          sum_biaya_perbaikan: 0.0,
-          mode_severity: "0",
-          maximum_biaya_perbaikan: 0.0
+          merek:                 merkRow?.nama        || 'Generic',
+          kategori:              kategoriRow?.nama    || 'Mechanical',
+          sub_kategori:          subKategoriRow?.nama || 'Tata Udara',
+          tipe:                  tipeRow?.nama        || 'General Equipment',
+          tingkat_kekritisan:    finalCriticality,
+          count_nama_aset:       0,
+          average_down_time:     0.0,
+          sum_biaya_perbaikan:   0.0,
+          mode_severity:         '',           // kosong untuk aset baru tanpa riwayat
+          maximum_biaya_perbaikan: 0.0,
+          lokasi_gedung:         gedungRow?.nama || '',
         }),
       });
 
       if (aiResponse.ok) {
         const aiData = await aiResponse.json();
-        if (aiData && aiData.predicted_rul !== undefined) {
+        if (aiData && typeof aiData.predicted_rul === 'number' && aiData.predicted_rul > 0) {
           predicted_rul = Math.round(aiData.predicted_rul);
         }
+      } else {
+        console.warn(`AI Engine returned non-OK status ${aiResponse.status} — using fallback RUL ${fallbackRUL}`);
       }
     } catch (e) {
-      console.warn("AI Engine predict failed, using initial_useful_life for RUL:", e);
+      console.warn(`AI Engine predict failed — using fallback RUL ${fallbackRUL} (${finalCriticality}):`, e);
     }
 
-    // Save initial prediction history
-    await prisma.assetPredictionHistory.create({
-      data: {
-        id_asset: newAsset.id,
-        predicted_rul: predicted_rul,
-        maintenance_count: 0,
-        average_down_time: 0.0,
-        total_maintenance_cost: 0.0,
-        max_maintenance_cost: 0.0,
-        mode_severity: "0"
-      }
-    });
+    // Save initial prediction history (non-fatal — asset creation already succeeded)
+    try {
+      await prisma.assetPredictionHistory.create({
+        data: {
+          id_asset:               newAsset.id,
+          predicted_rul:          predicted_rul,
+          maintenance_count:      0,
+          average_down_time:      0.0,
+          total_maintenance_cost: 0.0,
+          max_maintenance_cost:   0.0,
+          mode_severity:          '',
+        }
+      });
+    } catch (histErr) {
+      // Log but don't fail the request — the asset was already created
+      console.warn('Warning: Could not save initial prediction history:', histErr);
+    }
 
+    console.log(`[POST /api/assets] SUCCESS — asset "${asset_name}" created, predicted_rul=${predicted_rul}`);
     return res.status(201).json({
       message: 'Asset berhasil ditambahkan',
       data: {
@@ -360,8 +417,8 @@ app.post('/api/assets', authenticateJWT, async (req: Request, res: Response) => 
       }
     });
   } catch (error) {
-    console.error('Error adding asset:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
+    console.error('[POST /api/assets] Error adding asset:', error);
+    return res.status(500).json({ error: 'Internal Server Error', details: (error as Error).message });
   }
 });
 
@@ -451,7 +508,14 @@ app.get('/api/maintenances', authenticateJWT, async (req: Request, res: Response
         skip,
         take: limitNumber,
         include: {
-          asset: true,
+          asset: {
+            include: {
+              merk:        true,
+              kategori:    true,
+              subKategori: true,
+              tipe:        true,
+            },
+          },
           user: {
             select: { id: true, name: true, email: true },
           },
@@ -531,6 +595,7 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
           ],
         },
       },
+      include: { gedung: true, merk: true, kategori: true, subKategori: true, tipe: true },
     });
 
     if (!asset) {
@@ -616,16 +681,17 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          merek: asset.brand,
-          kategori: asset.category,
-          sub_kategori: asset.sub_category,
-          tipe: asset.type,
+          merek:        (asset as any).merk?.nama        || 'Generic',
+          kategori:     (asset as any).kategori?.nama    || 'Mechanical',
+          sub_kategori: (asset as any).subKategori?.nama || 'General',
+          tipe:         (asset as any).tipe?.nama        || 'General Equipment',
           tingkat_kekritisan: asset.criticality_level,
           count_nama_aset: count,
           average_down_time: avg_down_time,
           sum_biaya_perbaikan: sum_cost,
           mode_severity: mode_severity,
-          maximum_biaya_perbaikan: max_cost
+          maximum_biaya_perbaikan: max_cost,
+          lokasi_gedung: (asset as any).gedung?.nama || '',
         }),
       });
 
@@ -870,6 +936,10 @@ app.post('/api/maintenances/:id/logs', authenticateJWT, async (req: Request, res
                 members: true,
               },
             },
+            merk:        true,
+            kategori:    true,
+            subKategori: true,
+            tipe:        true,
           },
         },
       },
@@ -958,10 +1028,10 @@ app.post('/api/maintenances/:id/logs', authenticateJWT, async (req: Request, res
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            merek: maintenance.asset.brand,
-            kategori: maintenance.asset.category,
-            sub_kategori: maintenance.asset.sub_category,
-            tipe: maintenance.asset.type,
+            merek:        (maintenance.asset as any).merk?.nama        || 'Generic',
+            kategori:     (maintenance.asset as any).kategori?.nama    || 'Mechanical',
+            sub_kategori: (maintenance.asset as any).subKategori?.nama || '',
+            tipe:         (maintenance.asset as any).tipe?.nama        || '',
             tingkat_kekritisan: maintenance.asset.criticality_level,
             count_nama_aset: count,
             average_down_time: avg_down_time,
@@ -1000,7 +1070,14 @@ app.post('/api/maintenances/:id/logs', authenticateJWT, async (req: Request, res
     const result = await prisma.maintenance.findUniqueOrThrow({
       where: { id: maintenance.id },
       include: {
-        asset: true,
+        asset: {
+          include: {
+            merk:        true,
+            kategori:    true,
+            subKategori: true,
+            tipe:        true,
+          },
+        },
         user: {
           select: { id: true, name: true, email: true },
         },
@@ -1112,9 +1189,7 @@ app.post('/api/summarize', authenticateJWT, async (req: Request, res: Response) 
   try {
     let { limit, temperature } = req.body ?? {};
 
-    const userCompany = await prisma.company.findFirst({
-      where: { owner_id: (req as any).user.id }
-    });
+    const userCompany = await findUserCompany((req as any).user.id);
 
     if (!userCompany) {
       return res.status(404).json({ error: 'No company found for summarization' });
@@ -1148,11 +1223,17 @@ app.post('/api/summarize', authenticateJWT, async (req: Request, res: Response) 
   }
 });
 
-// GET /api/gedung — daftar gedung milik perusahaan user
+// GET /api/gedung — daftar gedung milik perusahaan user (owner ATAU member)
 app.get('/api/gedung', authenticateJWT, async (req: Request, res: Response) => {
   try {
+    const userId = (req as any).user.id;
     const userCompany = await prisma.company.findFirst({
-      where: { owner_id: (req as any).user.id },
+      where: {
+        OR: [
+          { owner_id: userId },
+          { members: { some: { id_user: userId } } },
+        ],
+      },
     });
     if (!userCompany) return res.status(404).json({ error: 'No company found' });
 
@@ -1172,7 +1253,15 @@ app.post('/api/gedung', authenticateJWT, async (req: Request, res: Response) => 
   try {
     const { nama, kode } = req.body;
     if (!nama || !kode) return res.status(400).json({ error: 'nama dan kode wajib diisi' });
-    const userCompany = await prisma.company.findFirst({ where: { owner_id: (req as any).user.id } });
+    const uid = (req as any).user.id;
+    const userCompany = await prisma.company.findFirst({
+      where: {
+        OR: [
+          { owner_id: uid },
+          { members: { some: { id_user: uid } } },
+        ],
+      },
+    });
     if (!userCompany) return res.status(404).json({ error: 'No company found' });
     const gedung = await (prisma as any).gedung.create({
       data: { nama, kode: kode.toUpperCase(), id_perusahaan: userCompany.id },
@@ -1220,9 +1309,7 @@ app.delete('/api/gedung/:id', authenticateJWT, async (req: Request, res: Respons
 // GET /api/technicians — daftar teknisi milik perusahaan user
 app.get('/api/technicians', authenticateJWT, async (req: Request, res: Response) => {
   try {
-    const userCompany = await prisma.company.findFirst({
-      where: { owner_id: (req as any).user.id },
-    });
+    const userCompany = await findUserCompany((req as any).user.id);
     if (!userCompany) return res.status(404).json({ error: 'No company found' });
 
     const { status, specialization } = req.query as { status?: string; specialization?: string };
@@ -1267,9 +1354,7 @@ app.patch('/api/technicians/:id/status', authenticateJWT, async (req: Request, r
 // GET /api/alerts — aset dengan predicted_rul <= 24 bulan (latest prediction per asset)
 app.get('/api/alerts', authenticateJWT, async (req: Request, res: Response) => {
   try {
-    const userCompany = await prisma.company.findFirst({
-      where: { owner_id: (req as any).user.id },
-    });
+    const userCompany = await findUserCompany((req as any).user.id);
 
     if (!userCompany) {
       return res.status(404).json({ error: 'No company found' });
@@ -1279,10 +1364,18 @@ app.get('/api/alerts', authenticateJWT, async (req: Request, res: Response) => {
 
     const alerts: any[] = await prisma.$queryRaw`
       SELECT DISTINCT ON (a.id)
-        a.id, a.asset_name, a.brand, a.category, a.sub_category, a.type,
+        a.id, a.asset_name,
+        m.nama  AS merk_nama,
+        k.nama  AS kategori_nama,
+        sk.nama AS sub_kategori_nama,
+        t.nama  AS tipe_nama,
         a.criticality_level, a.status,
         aph.predicted_rul, aph.mode_severity, aph.maintenance_count, aph.recorded_at
       FROM assets a
+      LEFT JOIN merk         m  ON m.id  = a.merk_id
+      LEFT JOIN kategori     k  ON k.id  = a.kategori_id
+      LEFT JOIN sub_kategori sk ON sk.id = a.sub_kategori_id
+      LEFT JOIN tipe         t  ON t.id  = a.tipe_id
       JOIN asset_prediction_history aph ON aph.id_asset = a.id
       WHERE a.id_perusahaan = ${companyId}
         AND aph.predicted_rul <= 24
@@ -1299,9 +1392,7 @@ app.get('/api/alerts', authenticateJWT, async (req: Request, res: Response) => {
 // GET /api/dashboard — aggregated stats for the dashboard
 app.get('/api/dashboard', authenticateJWT, async (req: Request, res: Response) => {
   try {
-    const userCompany = await prisma.company.findFirst({
-      where: { owner_id: (req as any).user.id },
-    });
+    const userCompany = await findUserCompany((req as any).user.id);
     if (!userCompany) return res.status(404).json({ error: 'No company found' });
     const companyId = userCompany.id;
 
@@ -1315,9 +1406,11 @@ app.get('/api/dashboard', authenticateJWT, async (req: Request, res: Response) =
 
     // Top categories for donut chart
     const categoryCounts: any[] = await prisma.$queryRaw`
-      SELECT category, COUNT(*)::int AS count
-      FROM assets WHERE id_perusahaan = ${companyId}
-      GROUP BY category ORDER BY count DESC LIMIT 7
+      SELECT COALESCE(k.nama, 'Tidak Diketahui') AS category, COUNT(*)::int AS count
+      FROM assets a
+      LEFT JOIN kategori k ON k.id = a.kategori_id
+      WHERE a.id_perusahaan = ${companyId}
+      GROUP BY k.nama ORDER BY count DESC LIMIT 7
     `;
 
     // Monthly maintenance count — last 6 months
@@ -1414,21 +1507,27 @@ app.get('/api/dashboard', authenticateJWT, async (req: Request, res: Response) =
 // GET /api/reports/assets — asset report with latest RUL per asset
 app.get('/api/reports/assets', authenticateJWT, async (req: Request, res: Response) => {
   try {
-    const userCompany = await prisma.company.findFirst({
-      where: { owner_id: (req as any).user.id },
-    });
+    const userCompany = await findUserCompany((req as any).user.id);
     if (!userCompany) return res.status(404).json({ error: 'No company found' });
     const companyId = userCompany.id;
 
     const assets: any[] = await prisma.$queryRaw`
       SELECT DISTINCT ON (a.id)
-        a.id, a.asset_name, a.brand, a.category, a.sub_category, a.type,
+        a.id, a.asset_name,
+        m.nama  AS merk_nama,
+        k.nama  AS kategori_nama,
+        sk.nama AS sub_kategori_nama,
+        t.nama  AS tipe_nama,
         a.criticality_level, a.status, a.purchase_date,
         COALESCE(aph.predicted_rul, a.initial_useful_life) AS predicted_rul,
         COALESCE(aph.maintenance_count, 0) AS maintenance_count,
         COALESCE(aph.total_maintenance_cost, 0) AS total_cost,
         aph.recorded_at
       FROM assets a
+      LEFT JOIN merk         m  ON m.id  = a.merk_id
+      LEFT JOIN kategori     k  ON k.id  = a.kategori_id
+      LEFT JOIN sub_kategori sk ON sk.id = a.sub_kategori_id
+      LEFT JOIN tipe         t  ON t.id  = a.tipe_id
       LEFT JOIN asset_prediction_history aph ON aph.id_asset = a.id
       WHERE a.id_perusahaan = ${companyId}
       ORDER BY a.id, aph.recorded_at DESC NULLS LAST
@@ -1444,16 +1543,19 @@ app.get('/api/reports/assets', authenticateJWT, async (req: Request, res: Respon
 // GET /api/reports/maintenance — full maintenance history
 app.get('/api/reports/maintenance', authenticateJWT, async (req: Request, res: Response) => {
   try {
-    const userCompany = await prisma.company.findFirst({
-      where: { owner_id: (req as any).user.id },
-    });
+    const userCompany = await findUserCompany((req as any).user.id);
     if (!userCompany) return res.status(404).json({ error: 'No company found' });
     const companyId = userCompany.id;
 
     const maintenances = await prisma.maintenance.findMany({
       where: { asset: { id_perusahaan: companyId } },
       include: {
-        asset: { select: { asset_name: true, category: true } },
+        asset: {
+          select: {
+            asset_name: true,
+            kategori: { select: { nama: true } },
+          },
+        },
         user: { select: { name: true } },
       },
       orderBy: { scheduled_date: 'desc' },
@@ -1463,7 +1565,7 @@ app.get('/api/reports/maintenance', authenticateJWT, async (req: Request, res: R
       maintenances: maintenances.map((m: any) => ({
         id: m.id,
         asset_name: m.asset.asset_name,
-        category: m.asset.category,
+        kategori_nama: m.asset.kategori?.nama ?? null,
         maintenance_type: m.maintenance_type,
         severity: m.severity,
         status: m.status,

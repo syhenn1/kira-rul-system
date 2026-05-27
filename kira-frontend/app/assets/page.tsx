@@ -1,12 +1,15 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback } from 'react';
 import Swal from 'sweetalert2';
 
 import Sidebar from '@/components/Sidebar';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import AddAssetModal from '@/components/AddAssetModal';
+import AssetAddedModal, { type AssetAddedResult } from '@/components/AssetAddedModal';
 import Tooltip from '@/components/Tooltip';
 import TourOverlay from '@/components/TourOverlay';
 import { apiFetch } from '@/lib/api';
@@ -63,6 +66,7 @@ const TOUR_STEPS = [
 ];
 
 export default function AssetsPage() {
+  const router = useRouter();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [stats, setStats] = useState<Stats>({ total: 0, by_status: {} });
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 10, total: 0, totalPages: 1 });
@@ -71,6 +75,8 @@ export default function AssetsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
+  const [assetResult, setAssetResult] = useState<AssetAddedResult | null>(null);
+  const [assetImage, setAssetImage] = useState<string | null>(null);
 
   const fetchAssets = useCallback(async (page: number, q: string, status: string) => {
     setLoading(true);
@@ -347,11 +353,29 @@ export default function AssetsPage() {
       <AddAssetModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onSuccess={() => {
-          setAddOpen(false);
-          fetchAssets(1, search, statusFilter);
+        onSuccess={(data, image) => {
+          setAssetResult(data);
+          setAssetImage(image);
         }}
       />
+
+      {/* Asset success modal — appears after PIN is confirmed and asset is saved */}
+      {assetResult && (
+        <AssetAddedModal
+          result={assetResult}
+          image={assetImage}
+          onAddAnother={() => {
+            setAssetResult(null);
+            setAssetImage(null);
+            setAddOpen(true);
+          }}
+          onViewAll={() => {
+            setAssetResult(null);
+            setAssetImage(null);
+            router.refresh();
+          }}
+        />
+      )}
     </ProtectedRoute>
   );
 }

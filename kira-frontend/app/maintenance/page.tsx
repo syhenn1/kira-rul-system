@@ -45,6 +45,8 @@ type RelatedUser = {
   email: string;
 };
 
+type LookupRef = { id: string; kode: string; nama: string } | null;
+
 type MaintenanceItem = {
   id: string;
   maintenance_type: string;
@@ -60,10 +62,10 @@ type MaintenanceItem = {
   asset?: {
     id: string;
     asset_name: string;
-    brand?: string;
-    category?: string;
-    sub_category?: string;
-    type?: string;
+    merk?:        LookupRef;
+    kategori?:    LookupRef;
+    subKategori?: LookupRef;
+    tipe?:        LookupRef;
     criticality_level?: string;
     status?: string;
   };
@@ -98,10 +100,10 @@ type Pagination = {
 type AssetOption = {
   id: string;
   asset_name: string;
-  brand?: string;
-  category?: string;
-  sub_category?: string;
-  type?: string;
+  merk?:        LookupRef;
+  kategori?:    LookupRef;
+  subKategori?: LookupRef;
+  tipe?:        LookupRef;
   status?: string;
   criticality_level?: string;
 };
@@ -671,10 +673,10 @@ function MaintenanceDetailModal({
               <SectionTitle title="Asset Information" />
               <div className="grid grid-cols-1 gap-5 mt-6">
                 <InfoItem label="Asset Name" value={maintenance.asset?.asset_name} />
-                <InfoItem label="Brand" value={maintenance.asset?.brand} />
-                <InfoItem label="Category" value={maintenance.asset?.category} />
-                <InfoItem label="Sub Category" value={maintenance.asset?.sub_category} />
-                <InfoItem label="Type" value={maintenance.asset?.type} />
+                <InfoItem label="Merk" value={maintenance.asset?.merk?.nama} />
+                <InfoItem label="Kategori" value={maintenance.asset?.kategori?.nama} />
+                <InfoItem label="Sub Kategori" value={maintenance.asset?.subKategori?.nama} />
+                <InfoItem label="Tipe" value={maintenance.asset?.tipe?.nama} />
                 <InfoItem label="Asset Status" value={maintenance.asset?.status} />
                 <InfoItem label="Criticality Level" value={maintenance.asset?.criticality_level} />
               </div>
@@ -977,7 +979,7 @@ function EditMaintenanceModal({
                   )}
                   {assets.map((asset) => (
                     <option key={asset.id} value={asset.id}>
-                      {asset.asset_name} - {asset.brand || '-'} / {asset.category || '-'}
+                      {asset.asset_name} - {asset.merk?.nama || '-'} / {asset.kategori?.nama || '-'}
                     </option>
                   ))}
                 </select>
