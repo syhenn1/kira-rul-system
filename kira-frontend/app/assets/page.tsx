@@ -2,10 +2,12 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 import Sidebar from '@/components/Sidebar';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import AddAssetModal from '@/components/AddAssetModal';
+import AssetAddedModal, { type AssetAddedResult } from '@/components/AssetAddedModal';
 import Tooltip from '@/components/Tooltip';
 import TourOverlay from '@/components/TourOverlay';
 
@@ -41,8 +43,11 @@ const TOUR_STEPS = [
 ];
 
 export default function AssetsPage() {
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
+  const [assetResult, setAssetResult] = useState<AssetAddedResult | null>(null);
+  const [assetImage, setAssetImage] = useState<string | null>(null);
 
   const filteredAssets = assets.filter((a) =>
     a.name.toLowerCase().includes(search.toLowerCase())
@@ -185,8 +190,29 @@ export default function AssetsPage() {
       <AddAssetModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onSuccess={() => setAddOpen(false)}
+        onSuccess={(data, image) => {
+          setAssetResult(data);
+          setAssetImage(image);
+        }}
       />
+
+      {/* Asset success modal — appears after PIN is confirmed and asset is saved */}
+      {assetResult && (
+        <AssetAddedModal
+          result={assetResult}
+          image={assetImage}
+          onAddAnother={() => {
+            setAssetResult(null);
+            setAssetImage(null);
+            setAddOpen(true);
+          }}
+          onViewAll={() => {
+            setAssetResult(null);
+            setAssetImage(null);
+            router.refresh();
+          }}
+        />
+      )}
     </ProtectedRoute>
   );
 }

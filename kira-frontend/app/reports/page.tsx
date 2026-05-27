@@ -38,9 +38,10 @@ type Tab = 'assets' | 'maintenance';
 type AssetRow = {
   id: string;
   asset_name: string;
-  brand: string;
-  category: string;
-  sub_category: string;
+  merk_nama: string | null;
+  kategori_nama: string | null;
+  sub_kategori_nama: string | null;
+  tipe_nama: string | null;
   criticality_level: string;
   status: string;
   purchase_date: string;
@@ -52,7 +53,7 @@ type AssetRow = {
 type MaintenanceRow = {
   id: string;
   asset_name: string;
-  category: string;
+  kategori_nama: string | null;
   maintenance_type: string;
   severity: string;
   status: string;
@@ -132,7 +133,7 @@ export default function ReportsPage() {
 
   // Derived unique categories and statuses
   const assetCategories = useMemo(
-    () => ['Semua', ...Array.from(new Set(assetRows.map((r) => r.category))).sort()],
+    () => ['Semua', ...Array.from(new Set(assetRows.map((r) => r.kategori_nama ?? 'Tidak Diketahui'))).sort()],
     [assetRows]
   );
   const maintenanceStatuses = useMemo(
@@ -146,8 +147,11 @@ export default function ReportsPage() {
   const filteredAssets = useMemo(() => {
     const q = search.toLowerCase();
     return assetRows.filter((r) => {
-      const matchSearch = r.asset_name.toLowerCase().includes(q) || r.brand.toLowerCase().includes(q) || r.category.toLowerCase().includes(q);
-      const matchCat = categoryFilter === 'Semua' || r.category === categoryFilter;
+      const matchSearch =
+        r.asset_name.toLowerCase().includes(q) ||
+        (r.merk_nama ?? '').toLowerCase().includes(q) ||
+        (r.kategori_nama ?? '').toLowerCase().includes(q);
+      const matchCat = categoryFilter === 'Semua' || (r.kategori_nama ?? 'Tidak Diketahui') === categoryFilter;
       return matchSearch && matchCat;
     });
   }, [assetRows, search, categoryFilter]);
@@ -155,7 +159,10 @@ export default function ReportsPage() {
   const filteredMaintenance = useMemo(() => {
     const q = search.toLowerCase();
     return maintenanceRows.filter((r) => {
-      const matchSearch = r.asset_name.toLowerCase().includes(q) || r.maintenance_type.toLowerCase().includes(q) || r.category.toLowerCase().includes(q);
+      const matchSearch =
+        r.asset_name.toLowerCase().includes(q) ||
+        r.maintenance_type.toLowerCase().includes(q) ||
+        (r.kategori_nama ?? '').toLowerCase().includes(q);
       const matchStatus = statusFilter === 'Semua' || r.status === statusFilter;
       return matchSearch && matchStatus;
     });
@@ -168,13 +175,13 @@ export default function ReportsPage() {
   const handleExport = () => {
     if (tab === 'assets') {
       exportCSV('laporan-aset.csv',
-        ['Nama Aset', 'Brand', 'Kategori', 'Sub Kategori', 'Status', 'Kekritisan', 'RUL (bln)', 'Jml Maintenance', 'Total Biaya', 'Tgl Pembelian'],
-        filteredAssets.map((r) => [r.asset_name, r.brand, r.category, r.sub_category, r.status, r.criticality_level, r.predicted_rul, r.maintenance_count, r.total_cost, formatDate(r.purchase_date)])
+        ['Nama Aset', 'Merk', 'Kategori', 'Sub Kategori', 'Tipe', 'Status', 'Kekritisan', 'RUL (bln)', 'Jml Maintenance', 'Total Biaya', 'Tgl Pembelian'],
+        filteredAssets.map((r) => [r.asset_name, r.merk_nama ?? '', r.kategori_nama ?? '', r.sub_kategori_nama ?? '', r.tipe_nama ?? '', r.status, r.criticality_level, r.predicted_rul, r.maintenance_count, r.total_cost, formatDate(r.purchase_date)])
       );
     } else {
       exportCSV('laporan-maintenance.csv',
         ['Aset', 'Kategori', 'Tipe', 'Severity', 'Status', 'Tgl Dijadwalkan', 'Tgl Selesai', 'Biaya', 'Down Time (hari)', 'Oleh'],
-        filteredMaintenance.map((r) => [r.asset_name, r.category, r.maintenance_type, r.severity, r.status, formatDate(r.scheduled_date), formatDate(r.completion_date), r.cost, r.down_time, r.user_name])
+        filteredMaintenance.map((r) => [r.asset_name, r.kategori_nama ?? '', r.maintenance_type, r.severity, r.status, formatDate(r.scheduled_date), formatDate(r.completion_date), r.cost, r.down_time, r.user_name])
       );
     }
   };
@@ -339,9 +346,9 @@ export default function ReportsPage() {
                       <tr key={r.id} className="stagger-item border-b border-gray-50 hover:bg-gray-50 transition-colors" style={{ animationDelay: `${i * 25}ms` }}>
                         <td className="px-6 py-4">
                           <p className="font-medium text-gray-900 text-sm">{r.asset_name}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{r.brand}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{r.merk_nama ?? '—'}</p>
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{r.category} / {r.sub_category}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{r.kategori_nama ?? '—'} / {r.sub_kategori_nama ?? '—'}</td>
                         <td className="px-6 py-4">
                           <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">{r.status}</span>
                         </td>
@@ -383,7 +390,7 @@ export default function ReportsPage() {
                       <tr key={r.id} className="stagger-item border-b border-gray-50 hover:bg-gray-50 transition-colors" style={{ animationDelay: `${i * 25}ms` }}>
                         <td className="px-6 py-4">
                           <p className="font-medium text-gray-900 text-sm">{r.asset_name}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{r.category}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{r.kategori_nama ?? '—'}</p>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">{r.maintenance_type}</td>
                         <td className="px-6 py-4">

@@ -77,20 +77,61 @@ model Asset {
   asset_name          String
   purchase_date       DateTime
   initial_useful_life Int
-  brand               String
-  category            String
-  sub_category        String
-  type                String
   criticality_level   String
   status              String
   asset_image         String?
 
+  merk_id         String?
+  kategori_id     String?
+  sub_kategori_id String?
+  tipe_id         String?
+
   company            Company                  @relation(fields: [id_perusahaan], references: [id])
   gedung             Gedung?                  @relation(fields: [gedung_id], references: [id])
+  merk               Merk?                    @relation(fields: [merk_id], references: [id])
+  kategori           Kategori?                @relation(fields: [kategori_id], references: [id])
+  subKategori        SubKategori?             @relation(fields: [sub_kategori_id], references: [id])
+  tipe               Tipe?                    @relation(fields: [tipe_id], references: [id])
   maintenances       Maintenance[]
   prediction_history AssetPredictionHistory[]
 
   @@map("assets")
+}
+
+model Merk {
+  id     String  @id @default(uuid())
+  kode   String  @unique
+  nama   String
+  assets Asset[]
+
+  @@map("merk")
+}
+
+model Kategori {
+  id     String  @id @default(uuid())
+  kode   String  @unique
+  nama   String
+  assets Asset[]
+
+  @@map("kategori")
+}
+
+model SubKategori {
+  id     String  @id @default(uuid())
+  kode   String  @unique
+  nama   String
+  assets Asset[]
+
+  @@map("sub_kategori")
+}
+
+model Tipe {
+  id     String  @id @default(uuid())
+  kode   String  @unique
+  nama   String
+  assets Asset[]
+
+  @@map("tipe")
 }
 
 model Maintenance {

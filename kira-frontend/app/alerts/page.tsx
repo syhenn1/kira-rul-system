@@ -35,9 +35,10 @@ const WATCH = 24;
 type AlertAsset = {
   id: string;
   asset_name: string;
-  brand: string;
-  category: string;
-  sub_category: string;
+  merk_nama: string | null;
+  kategori_nama: string | null;
+  sub_kategori_nama: string | null;
+  tipe_nama: string | null;
   criticality_level: string;
   status: string;
   predicted_rul: number;
@@ -224,7 +225,7 @@ export default function AlertsPage() {
                     </div>
 
                     <p className="text-sm text-gray-400 mt-0.5">
-                      {asset.brand} — {asset.category} / {asset.sub_category}
+                      {asset.merk_nama ?? '—'} — {asset.kategori_nama ?? '—'} / {asset.sub_kategori_nama ?? '—'}
                     </p>
 
                     <div className="mt-3 flex items-center gap-3">
