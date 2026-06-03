@@ -1,4 +1,3 @@
-import MaintenanceSimulator from "@/components/MaintenanceSimulator";
 import { BrainCircuit, LineChart, ShieldAlert } from "lucide-react";
 
 export default function Home() {
@@ -14,14 +13,8 @@ export default function Home() {
             <span className="font-bold text-xl tracking-tight text-zinc-900 dark:text-white">Kira RUL System</span>
           </div>
           <div className="flex items-center gap-6">
-            <button className="text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors">
-              Documentation
-            </button>
             <a href="/auth/login" className="text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors">
               Login
-            </a>
-            <a href="/dashboard" className="text-sm font-medium px-4 py-2 rounded-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:scale-105 transition-transform">
-              Dashboard
             </a>
           </div>
         </div>
@@ -55,12 +48,6 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-slide-up" style={{ animationDelay: "0.2s" }}>
-            <a href="#simulator" className="px-8 py-4 rounded-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-semibold hover:scale-105 transition-transform">
-              Try the Simulator
-            </a>
-            <a href="/dashboard" className="px-8 py-4 rounded-full glass font-semibold hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 transition-colors">
-              View Dashboard
-            </a>
           </div>
         </div>
       </section>
@@ -68,40 +55,148 @@ export default function Home() {
       {/* Features Section */}
       <section className="py-20 px-6 bg-white dark:bg-zinc-950/50 border-y border-zinc-200 dark:border-zinc-900">
         <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold text-zinc-900 dark:text-white mb-4">Fitur Utama</h2>
+            <p className="text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto">
+              Solusi lengkap untuk manajemen aset dan prediksi maintenance yang lebih baik.
+            </p>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <FeatureCard 
               icon={<BrainCircuit className="w-6 h-6 text-blue-500" />}
-              title="AI RUL Prediction"
-              description="Our advanced ML models analyze historical data to accurately predict how many days your asset has left before failure."
+              title="Prediksi RUL dengan AI"
+              description="Model ML canggih kami menganalisis data historis untuk memprediksi dengan akurat berapa hari aset Anda tersisa sebelum gagal."
               delay="0.1s"
             />
             <FeatureCard 
               icon={<ShieldAlert className="w-6 h-6 text-purple-500" />}
-              title="Severity Classification"
-              description="Automatically classify maintenance reports into severity levels based on symptoms and causes to prioritize your workflow."
+              title="Klasifikasi Tingkat Keparahan"
+              description="Klasifikasi otomatis laporan maintenance ke tingkat keparahan berdasarkan gejala dan penyebab untuk memprioritaskan alur kerja Anda."
               delay="0.2s"
             />
             <FeatureCard 
               icon={<LineChart className="w-6 h-6 text-pink-500" />}
-              title="Actionable Insights"
-              description="Get clear, data-driven recommendations on when to schedule maintenance to minimize downtime and save costs."
+              title="Rekomendasi Aksi"
+              description="Dapatkan rekomendasi yang jelas dan berbasis data tentang kapan jadwal maintenance untuk meminimalkan downtime dan menghemat biaya."
               delay="0.3s"
             />
           </div>
         </div>
       </section>
 
-      {/* Simulator Section */}
-      <section id="simulator" className="py-24 px-6 relative">
+      {/* About Section */}
+      <section className="py-20 px-6 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-zinc-900 dark:to-zinc-900 border-y border-zinc-200 dark:border-zinc-800">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-zinc-900 dark:text-white mb-4">Interactive AI Demo</h2>
-            <p className="text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto">
-              Input a mock maintenance record below. The Kira Engine will analyze the symptoms and determine the predicted RUL and issue severity.
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold text-zinc-900 dark:text-white mb-4">Tentang Kami</h2>
+            <h3 className="text-2xl font-semibold text-blue-600 dark:text-blue-400 mb-6">
+              Efisiensi Biaya & Zero Downtime untuk Aset Kritis Perusahaan Anda
+            </h3>
+            <p className="text-lg text-zinc-700 dark:text-zinc-300 max-w-3xl mx-auto leading-relaxed">
+              KIRA menggunakan teknologi <span className="font-semibold">Deep Learning</span> untuk memprediksi <span className="font-semibold">Remaining Useful Life (RUL)</span> aset Anda dengan akurasi tinggi. Dengan analisis pola mendalam dari data historis, sensor, dan log maintenance, kami membantu Anda membuat keputusan proaktif yang menghemat biaya dan mencegah downtime tak terduga.
             </p>
           </div>
-          
-          <MaintenanceSimulator />
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12">
+            <div className="p-8 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:shadow-lg transition-all animate-slide-up" style={{ animationDelay: "0s" }}>
+              <div className="text-5xl mb-4">🎯</div>
+              <h4 className="text-xl font-semibold text-zinc-900 dark:text-white mb-3">Prediksi Akurat (RUL)</h4>
+              <p className="text-zinc-600 dark:text-zinc-400">
+                Hitung sisa waktu pakai setiap aset dengan presisi tinggi menggunakan model machine learning yang telah dilatih dengan jutaan data point, memungkinkan perencanaan maintenance jangka panjang yang lebih baik.
+              </p>
+            </div>
+
+            <div className="p-8 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:shadow-lg transition-all animate-slide-up" style={{ animationDelay: "0.1s" }}>
+              <div className="text-5xl mb-4">⚡</div>
+              <h4 className="text-xl font-semibold text-zinc-900 dark:text-white mb-3">Klasifikasi Otomatis</h4>
+              <p className="text-zinc-600 dark:text-zinc-400">
+                Tentukan tingkat keparahan dan urgensi setiap maintenance report secara otomatis berdasarkan analisis gejala dan data historis, sehingga tim Anda dapat memprioritaskan pekerjaan dengan lebih efektif.
+              </p>
+            </div>
+
+            <div className="p-8 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:shadow-lg transition-all animate-slide-up" style={{ animationDelay: "0.2s" }}>
+              <div className="text-5xl mb-4">💰</div>
+              <h4 className="text-xl font-semibold text-zinc-900 dark:text-white mb-3">Efisiensi Biaya</h4>
+              <p className="text-zinc-600 dark:text-zinc-400">
+                Kurangi maintenance tak terencana hingga mencapai zero-downtime dengan strategi preventive maintenance yang tepat sasaran, menghemat biaya operasional dan meningkatkan produktivitas aset Anda secara signifikan.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works Section */}
+      <section id="how-it-works" className="py-24 px-6 relative">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold text-zinc-900 dark:text-white mb-4">Cara Kerja Sistem</h2>
+            <p className="text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto">
+              Tiga langkah sederhana untuk mengoptimalkan manajemen aset Anda dengan kecerdasan buatan.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <WorkflowCard
+              number="1"
+              title="Data Collection"
+              description="Kumpulan data aset dari berbagai sumber - sensor, log maintenance, dan historical data"
+              icon="📊"
+              delay="0s"
+            />
+            <WorkflowCard
+              number="2"
+              title="AI Processing"
+              description="Model ML menganalisis pola untuk memprediksi RUL dan mengidentifikasi anomali"
+              icon="🤖"
+              delay="0.15s"
+            />
+            <WorkflowCard
+              number="3"
+              title="Action Plan"
+              description="Dapatkan rekomendasi maintenance dengan timeline spesifik untuk setiap aset"
+              icon="✅"
+              delay="0.3s"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Team Section */}
+      <section className="py-20 px-6 bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-950/50 dark:to-[#050505]">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold text-zinc-900 dark:text-white mb-4">Tim Pengembang</h2>
+            <p className="text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto">
+              Dibangun oleh tim yang berdedikasi untuk menghadirkan solusi manajemen aset terbaik.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            {[
+              { name: "Mochamad Rifat Syahman Hambali", short: "Rifat", avatar: "🔵" },
+              { name: "Muhammad Dzaky Fauzan", short: "Dzaky", avatar: "🟣" },
+              { name: "Yasmeen Almira", short: "Yasmeen", avatar: "🟢" },
+              { name: "Muhammad Syukron Rizky Fadilla", short: "Syukron", avatar: "🟡" },
+              { name: "Muhamad Gerraldy Ghassan Herfio", short: "Gerraldy", avatar: "🔴" },
+            ].map((member, idx) => (
+              <div 
+                key={idx}
+                className="p-6 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:shadow-lg transition-all hover:scale-105 text-center animate-slide-up"
+                style={{ animationDelay: `${idx * 0.1}s` }}
+              >
+                <div className="text-4xl mb-4">{member.avatar}</div>
+                <h3 className="font-semibold text-zinc-900 dark:text-white text-sm md:text-base mb-2">
+                  {member.short}
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 mb-3">
+                  {member.name}
+                </p>
+                <span className="inline-block px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-medium">
+                  ROLE
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -120,6 +215,24 @@ function FeatureCard({ icon, title, description, delay }: { icon: React.ReactNod
         {icon}
       </div>
       <h3 className="text-xl font-semibold text-zinc-900 dark:text-white mb-2">{title}</h3>
+      <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+function WorkflowCard({ number, title, description, icon, delay }: { number: string, title: string, description: string, icon: string, delay: string }) {
+  return (
+    <div 
+      className="relative p-8 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:shadow-lg transition-all animate-slide-up"
+      style={{ animationDelay: delay }}
+    >
+      <div className="absolute -top-4 -left-4 w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold shadow-lg">
+        {number}
+      </div>
+      <div className="text-5xl mb-4">{icon}</div>
+      <h3 className="text-xl font-semibold text-zinc-900 dark:text-white mb-3">{title}</h3>
       <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed">
         {description}
       </p>
