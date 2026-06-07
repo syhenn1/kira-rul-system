@@ -447,6 +447,26 @@ app.post('/api/predict-rul', async (req: Request, res: Response) => {
   }
 });
 
+// Proxy endpoint prediksi severity ke AI engine
+app.post('/api/predict-severity', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const aiEngineBase = (process.env.AI_ENGINE_URL || 'http://localhost:8000').replace(/\/$/, '');
+    const response = await fetch(`${aiEngineBase}/predict-severity`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return res.status(response.status).json(data);
+    }
+    return res.status(200).json(data);
+  } catch (error) {
+    console.error('Error in predict-severity endpoint:', error);
+    return res.status(500).json({ error: 'Failed to predict severity', details: (error as Error).message });
+  }
+});
+
 app.get('/api/maintenances', authenticateJWT, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
@@ -575,7 +595,10 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
       status,
       assigned_technician_id,
       note,
-      id_user
+      id_user,
+      jenis_kerusakan,
+      penyebab,
+      spare_part_digunakan,
     } = req.body;
 
     if (!id_asset || !scheduled_date) {
@@ -623,6 +646,9 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
         down_time: down_time,
         cost: cost ? parseFloat(cost) : 0.0,
         status: status || 'Scheduled',
+        jenis_kerusakan:      jenis_kerusakan      || null,
+        penyebab:             penyebab             || null,
+        spare_part_digunakan: spare_part_digunakan || null,
       }
     });
 
@@ -707,6 +733,35 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
       console.warn("AI Engine predict failed during maintenance creation:", e);
     }
 
+    // Prediksi severity via AI engine (opsional — hanya jika field teks tersedia)
+    let predicted_severity: string | null = null;
+    let severity_confidence: number | null = null;
+    if (jenis_kerusakan && penyebab) {
+      try {
+        const aiEngineBase = (process.env.AI_ENGINE_URL || 'http://localhost:8000').replace(/\/$/, '');
+        const sevResponse = await fetch(`${aiEngineBase}/predict-severity`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jenis_kerusakan:  jenis_kerusakan,
+            penyebab:         penyebab,
+            spare_part:       spare_part_digunakan || '',
+            kategori:         (asset as any).kategori?.nama    || '',
+            sub_kategori:     (asset as any).subKategori?.nama || '',
+            tipe:             (asset as any).tipe?.nama        || '',
+            biaya_perbaikan:  cost ? parseFloat(cost) : 0,
+          }),
+        });
+        if (sevResponse.ok) {
+          const sevData = await sevResponse.json();
+          predicted_severity  = sevData.predicted_severity  ?? null;
+          severity_confidence = sevData.confidence          ?? null;
+        }
+      } catch (e) {
+        console.warn("AI Engine predict-severity failed (non-fatal):", e);
+      }
+    }
+
     // Save history with the predicted RUL and actual aggregates
     await prisma.assetPredictionHistory.create({
       data: {
@@ -745,7 +800,9 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
       message: 'Maintenance berhasil ditambahkan',
       data: {
         ...createdMaintenance,
-        predicted_rul
+        predicted_rul,
+        predicted_severity,
+        severity_confidence,
       }
     });
   } catch (error) {

@@ -432,6 +432,30 @@ async function main() {
   // Only use main-company assets for realistic dashboard data
   const mainAssets = assetsToInsert.filter((a) => a.id_perusahaan === mainCompanyId);
 
+  const jenisKerusakanPool = [
+    'Mati mendadak', 'Kebocoran', 'Retak/pecah', 'Getaran berlebihan',
+    'Koneksi terputus', 'Korsleting', 'Aus/abrasi', 'Overheating',
+    'Tidak berfungsi', 'Suara berisik', 'Bocor refrigeran', 'Filter tersumbat',
+    'Daya tidak stabil', 'Layar mati', 'Pompa tidak bekerja',
+    'Kebocoran pipa', 'Sensor tidak responsif', 'Panel trip', 'Baterai lemah',
+    'Kompresor rusak',
+  ];
+
+  const penyebabPool = [
+    'Overload', 'Kelembaban tinggi', 'Usia pakai', 'Faktor lingkungan',
+    'Kurang pelumasan', 'Korosi', 'Human error', 'Tegangan tidak stabil',
+    'Debu dan kotoran', 'Beban berlebih', 'Kabel putus', 'Getaran mekanis',
+    'Suhu ekstrem', 'Pemeliharaan tertunda', 'Komponen aus',
+  ];
+
+  const sparePartPool = [
+    'PCB board', 'Seal ring', 'Kompresor', 'Kapasitor', 'Filter udara',
+    'Bearing', 'Belt/Sabuk', 'Motor listrik', 'Thermostat', 'Valve',
+    'Gasket', 'Pipa PVC', 'Lensa kamera', 'Pompa mini', 'Fuse/Sekring',
+    'Relay', 'Kontaktor', 'Lampu indikator', 'Sensor suhu', 'Suku cadang umum',
+    null, null, // beberapa record tanpa spare part (nullable)
+  ];
+
   const maintenancesToInsert: any[] = [];
 
   for (let i = 0; i < TARGET_COUNT; i++) {
@@ -484,6 +508,9 @@ async function main() {
       down_time: downTime,
       cost,
       status,
+      jenis_kerusakan:      pick(jenisKerusakanPool),
+      penyebab:             pick(penyebabPool),
+      spare_part_digunakan: pick(sparePartPool),
     });
   }
   await prisma.maintenance.createMany({ data: maintenancesToInsert });

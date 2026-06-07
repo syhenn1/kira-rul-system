@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import importlib.metadata
 import traceback
@@ -21,11 +22,19 @@ except Exception:
 
 app = FastAPI(title="Kira AI Engine", description="RUL Prediction API")
 
-# Global model state
+# Global model state — RUL
 gb_model = None
 preprocessor = None
 _model_type: str = "none"
 _model_feature_names: List[str] = []
+
+# Label mapping: Indonesian (training) → English (API response)
+_SEVERITY_LABEL_MAP = {
+    "Ringan": "Low",
+    "Sedang": "Medium",
+    "Berat":  "High",
+    "Fatal":  "Critical",
+}
 
 
 class MockRULPredictor:
@@ -53,6 +62,163 @@ def _extract_feature_names(obj) -> List[str]:
                 cols.extend(c)
         return cols
     return []
+
+
+def _clean_text(s: str) -> str:
+    """Preprocessing teks sama persis dengan notebook training severity."""
+    s = str(s).lower()
+    s = re.sub(r'[^a-z0-9\s]', ' ', s)
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+
+# ── Rule-Based Severity Engine ────────────────────────────────────────────────
+#
+# Menggunakan fitur yang SAMA dengan model TF-IDF di notebook training:
+#   - teks  : Jenis Kerusakan + Penyebab + Spare Part  (tokenisasi unigram+bigram)
+#   - Kategori / Sub Kategori / Tipe                   (rule penyesuai risiko)
+#   - Biaya Perbaikan                                  (threshold scoring)
+#
+# Bobot per kelas didasarkan pada distribusi crosstab EDA notebook:
+# 20 nilai unik Jenis Kerusakan × 4 kelas severity
+# 12 nilai unik Penyebab        × 4 kelas severity
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Jenis Kerusakan (20 nilai unik dari dataset) → bobot per kelas
+_JENIS_KERUSAKAN_SCORES: dict = {
+    # Fatal dominant — kegagalan total / risiko keselamatan
+    "korsleting":             {"Fatal": 9.0, "Berat": 2.0, "Sedang": 0.5, "Ringan": 0.0},
+    "kompresor rusak":        {"Fatal": 8.5, "Berat": 2.5, "Sedang": 0.5, "Ringan": 0.0},
+    "mati mendadak":          {"Fatal": 8.0, "Berat": 3.0, "Sedang": 1.0, "Ringan": 0.0},
+    "koneksi terputus":       {"Fatal": 7.5, "Berat": 3.5, "Sedang": 1.0, "Ringan": 0.0},
+    "panel trip":             {"Fatal": 7.5, "Berat": 3.0, "Sedang": 1.0, "Ringan": 0.0},
+    "tidak berfungsi":        {"Fatal": 7.0, "Berat": 4.0, "Sedang": 1.0, "Ringan": 0.0},
+    # Berat dominant — kerusakan signifikan tapi tidak total
+    "bocor refrigeran":       {"Fatal": 3.0, "Berat": 8.0, "Sedang": 1.5, "Ringan": 0.0},
+    "overheating":            {"Fatal": 3.5, "Berat": 7.5, "Sedang": 1.5, "Ringan": 0.0},
+    "getaran berlebihan":     {"Fatal": 2.0, "Berat": 7.5, "Sedang": 2.5, "Ringan": 0.0},
+    "pompa tidak bekerja":    {"Fatal": 3.0, "Berat": 7.0, "Sedang": 2.0, "Ringan": 0.0},
+    "daya tidak stabil":      {"Fatal": 3.5, "Berat": 7.0, "Sedang": 2.0, "Ringan": 0.0},
+    "kebocoran pipa":         {"Fatal": 2.5, "Berat": 7.0, "Sedang": 2.5, "Ringan": 0.5},
+    # Sedang dominant — kerusakan moderat
+    "retak pecah":            {"Fatal": 1.0, "Berat": 3.5, "Sedang": 7.0, "Ringan": 1.5},
+    "suara berisik":          {"Fatal": 0.5, "Berat": 2.5, "Sedang": 7.0, "Ringan": 2.0},
+    "filter tersumbat":       {"Fatal": 0.5, "Berat": 2.0, "Sedang": 7.0, "Ringan": 2.5},
+    "layar mati":             {"Fatal": 1.0, "Berat": 3.0, "Sedang": 6.5, "Ringan": 1.5},
+    "baterai lemah":          {"Fatal": 0.5, "Berat": 2.0, "Sedang": 6.5, "Ringan": 2.5},
+    "sensor tidak responsif": {"Fatal": 1.0, "Berat": 3.0, "Sedang": 6.5, "Ringan": 1.5},
+    "aus abrasi":             {"Fatal": 0.5, "Berat": 3.0, "Sedang": 6.5, "Ringan": 2.0},
+    # Ringan-Sedang — kerusakan minor / ambigu
+    "kebocoran":              {"Fatal": 1.5, "Berat": 3.5, "Sedang": 5.0, "Ringan": 3.0},
+}
+
+# Penyebab (12 nilai unik dari dataset) → bobot per kelas
+_PENYEBAB_SCORES: dict = {
+    # Fatal/Berat leaning — penyebab berisiko tinggi
+    "overload":               {"Fatal": 6.0, "Berat": 4.0, "Sedang": 1.5, "Ringan": 0.5},
+    "kabel putus":            {"Fatal": 6.0, "Berat": 3.5, "Sedang": 1.0, "Ringan": 0.0},
+    "beban berlebih":         {"Fatal": 5.5, "Berat": 4.0, "Sedang": 1.5, "Ringan": 0.5},
+    "tegangan tidak stabil":  {"Fatal": 5.0, "Berat": 4.5, "Sedang": 1.5, "Ringan": 0.0},
+    # Berat/Sedang leaning — penyebab menengah
+    "kelembaban tinggi":      {"Fatal": 2.5, "Berat": 5.5, "Sedang": 3.0, "Ringan": 1.0},
+    "korosi":                 {"Fatal": 2.0, "Berat": 5.0, "Sedang": 3.5, "Ringan": 1.5},
+    "getaran mekanis":        {"Fatal": 2.0, "Berat": 5.0, "Sedang": 3.5, "Ringan": 1.5},
+    "human error":            {"Fatal": 2.5, "Berat": 4.0, "Sedang": 4.0, "Ringan": 1.5},
+    # Sedang/Ringan leaning — penyebab rendah risiko
+    "usia pakai":             {"Fatal": 1.0, "Berat": 2.5, "Sedang": 4.5, "Ringan": 4.0},
+    "faktor lingkungan":      {"Fatal": 1.0, "Berat": 2.0, "Sedang": 4.5, "Ringan": 4.5},
+    "kurang pelumasan":       {"Fatal": 0.5, "Berat": 2.5, "Sedang": 4.5, "Ringan": 4.5},
+    "debu dan kotoran":       {"Fatal": 0.0, "Berat": 1.0, "Sedang": 3.5, "Ringan": 6.5},
+}
+
+# Biaya perbaikan (Rp) → bobot kelas
+# Dari EDA notebook: biaya adalah fitur PALING DISKRIMINATIF.
+# Threshold mengikuti distribusi biaya dataset (min 446rb, max 18.4jt).
+_BIAYA_RULES: list = [
+    # (batas_bawah_Rp, bobot_per_kelas)  — urut tertinggi ke terendah
+    (15_000_000, {"Fatal": 30.0, "Berat": 10.0, "Sedang":  3.0, "Ringan":  0.0}),
+    ( 8_000_000, {"Fatal": 15.0, "Berat": 25.0, "Sedang":  5.0, "Ringan":  0.0}),
+    ( 3_000_000, {"Fatal":  4.0, "Berat": 12.0, "Sedang": 20.0, "Ringan":  4.0}),
+    ( 1_000_000, {"Fatal":  1.0, "Berat":  5.0, "Sedang": 15.0, "Ringan": 10.0}),
+    (         0, {"Fatal":  0.0, "Berat":  2.0, "Sedang":  8.0, "Ringan": 20.0}),
+]
+
+# Kategori berisiko tinggi → skor Fatal/Berat dinaikkan sedikit
+_HIGH_RISK_KATEGORI = {
+    "mechanical", "electrical", "sistem pemadam kebakaran",
+    "sistem proteksi kebakaran aktif", "sistem energi",
+    "distribusi air", "sistem transportasi gedung",
+}
+
+
+def _tokenize(teks_bersih: str) -> list:
+    """
+    Tokenisasi teks menjadi unigram + bigram.
+    Identik dengan TfidfVectorizer(ngram_range=(1,2)) di notebook training:
+      - unigram : setiap kata tunggal
+      - bigram  : setiap pasangan kata berurutan
+    Input  : teks yang sudah melalui _clean_text()
+    Output : list token string (duplikat diizinkan, mencerminkan frekuensi)
+    """
+    words = teks_bersih.split()
+    bigrams = [f"{words[i]} {words[i + 1]}" for i in range(len(words) - 1)]
+    return words + bigrams
+
+
+def _compute_severity_scores(
+    jenis_kerusakan: str,
+    penyebab: str,
+    spare_part: str,
+    kategori: str,
+    biaya_perbaikan: float,
+) -> dict:
+    """
+    Hitung skor rule-based per kelas severity dengan fitur yang sama
+    dengan model TF-IDF training.
+
+    Tahapan perhitungan:
+      1. Gabung teks (Jenis Kerusakan + Penyebab + Spare Part) → clean_text
+      2. Tokenisasi → unigram + bigram  (sama dengan TF-IDF ngram_range=(1,2))
+      3. Match token ke tabel _JENIS_KERUSAKAN_SCORES → akumulasi skor
+      4. Match token ke tabel _PENYEBAB_SCORES        → akumulasi skor
+      5. Biaya Perbaikan → tambah bobot dari _BIAYA_RULES
+      6. Kategori berisiko tinggi → skor Fatal/Berat +1.5/+1.0
+
+    Return: dict {kelas: skor_float}
+    """
+    KELAS = ["Fatal", "Berat", "Sedang", "Ringan"]
+    scores = {k: 0.0 for k in KELAS}
+
+    # 1 & 2 — Tokenisasi
+    teks_gabung = f"{jenis_kerusakan} {penyebab} {spare_part}"
+    teks_bersih = _clean_text(teks_gabung)
+    token_set   = set(_tokenize(teks_bersih))   # set untuk lookup O(1)
+
+    # 3 — Matching Jenis Kerusakan
+    for term, bobot_kelas in _JENIS_KERUSAKAN_SCORES.items():
+        if term in token_set:
+            for kls, bobot in bobot_kelas.items():
+                scores[kls] += bobot
+
+    # 4 — Matching Penyebab
+    for term, bobot_kelas in _PENYEBAB_SCORES.items():
+        if term in token_set:
+            for kls, bobot in bobot_kelas.items():
+                scores[kls] += bobot
+
+    # 5 — Bobot Biaya Perbaikan (ambil tier pertama yang sesuai)
+    for batas, bobot_kelas in _BIAYA_RULES:
+        if biaya_perbaikan >= batas:
+            for kls, bobot in bobot_kelas.items():
+                scores[kls] += bobot
+            break
+
+    # 6 — Penyesuai Kategori Risiko Tinggi
+    if _clean_text(kategori) in _HIGH_RISK_KATEGORI:
+        scores["Fatal"] += 1.5
+        scores["Berat"] += 1.0
+
+    return scores
 
 
 @app.on_event("startup")
@@ -117,6 +283,8 @@ def load_models():
         print(f"[Startup] [ERR] Error tidak terduga: {e}")
         gb_model = MockRULPredictor()
         _model_type = "mock"
+
+    print("[Startup] [OK] Severity engine: rule-based (tidak memerlukan file model)")
 
 
 # ── Input schema ──────────────────────────────────────────────────────────────
@@ -275,6 +443,61 @@ def predict_rul(data: AssetInput):
                 "model_expected_features": _model_feature_names[:20],
             }
         )
+
+
+class SeverityInput(BaseModel):
+    jenis_kerusakan: str = Field(..., description="Jenis kerusakan, contoh: 'Mati mendadak'")
+    penyebab: str = Field(..., description="Penyebab kerusakan, contoh: 'Kelembaban tinggi'")
+    spare_part: str = Field(default="", description="Spare part digunakan (opsional)")
+    kategori: str = Field(..., description="Kategori aset, contoh: 'Mechanical'")
+    sub_kategori: str = Field(..., description="Sub kategori aset, contoh: 'Tata Udara'")
+    tipe: str = Field(..., description="Tipe aset, contoh: 'AC Split'")
+    biaya_perbaikan: float = Field(default=0.0, description="Estimasi biaya perbaikan (Rp)")
+
+
+@app.post("/predict-severity")
+def predict_severity(data: SeverityInput):
+    try:
+        # ── Hitung skor rule-based (tokenisasi + keyword matching + biaya) ──
+        scores = _compute_severity_scores(
+            jenis_kerusakan=data.jenis_kerusakan,
+            penyebab=data.penyebab,
+            spare_part=data.spare_part,
+            kategori=data.kategori,
+            biaya_perbaikan=data.biaya_perbaikan,
+        )
+
+        # ── Pilih kelas dengan skor tertinggi ──────────────────────────────
+        label_id = max(scores, key=scores.__getitem__)
+        label_en = _SEVERITY_LABEL_MAP.get(label_id, label_id)
+
+        # ── Normalisasi skor → probabilitas (proporsional linear) ──────────
+        total = sum(scores.values())
+        if total <= 0:
+            # Fallback jika tidak ada keyword yang cocok sama sekali
+            proba_id = {"Fatal": 0.05, "Berat": 0.15, "Sedang": 0.55, "Ringan": 0.25}
+        else:
+            proba_id = {k: round(v / total, 3) for k, v in scores.items()}
+
+        proba_en   = {_SEVERITY_LABEL_MAP.get(k, k): v for k, v in proba_id.items()}
+        confidence = round(max(proba_en.values()), 3)
+
+        print(
+            f"[Severity] label={label_en!r} confidence={confidence:.2f} "
+            f"biaya={data.biaya_perbaikan:,.0f} scores={scores}"
+        )
+        return {
+            "predicted_severity":    label_en,
+            "predicted_severity_id": label_id,
+            "confidence":            confidence,
+            "probabilities":         proba_en,
+            "scores":                scores,     # transparansi skor mentah
+            "status":                "success",
+        }
+    except Exception as e:
+        print(f"[Severity] [ERR] {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=400, detail={"error": str(e)})
 
 
 @app.post("/summarize")

@@ -141,13 +141,16 @@ model Maintenance {
   id_teknisi             String?   // FK ke tabel technicians
   assigned_technician_id String?   // FK ke tabel users (legacy)
   maintenance_type       String
-  severity               String    // Low, Medium, High
+  severity               String    // Low, Medium, High, Critical
   scheduled_date         DateTime
   start_date             DateTime?
   completion_date        DateTime?
   down_time              Int       @default(0)
   cost                   Float     @default(0.0)
   status                 String    // Scheduled, In Progress, Completed
+  jenis_kerusakan        String?
+  penyebab               String?
+  spare_part_digunakan   String?
 
   asset              Asset                    @relation(fields: [id_asset], references: [id])
   user               User                     @relation(fields: [id_user], references: [id])
