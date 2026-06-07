@@ -573,10 +573,25 @@ Sedang	2,0	,5	1367000,0	1067000,0	327,0	Generic	Arsitektur	Tata Lingkungan	Lanta
   const mainUserId = '115deaf4-d9f2-45ea-9c07-44d94d05d59c';
   const mainCompanyId = 'c0a80101-1234-4567-89ab-cdef12345678';
 
+  // Nama & email karyawan nyata (bukan placeholder "User Pekerja N") agar
+  // tampil masuk akal di kolom "Created By" pada timeline maintenance.
+  const rawEmployees = [
+    'Dewi Anggraini', 'Siti Nurhaliza', 'Bayu Saputra', 'Indra Gunawan', 'Wahyu Hidayat',
+    'Agus Setiawan', 'Hadi Prasetyo', 'Dian Permata', 'Maya Kusuma', 'Ratna Sari',
+    'Yuni Astuti', 'Putri Wulandari', 'Arif Wibowo', 'Bambang Hartono', 'Doni Saputra',
+    'Galih Pratama', 'Hendro Wibisono', 'Imam Syafii', 'Joni Iskandar', 'Kurnia Wijaya',
+    'Lina Marlina', 'Mira Sasmita', 'Nina Kartika', 'Oka Wirawan', 'Panji Gumilang',
+    'Qori Aulia', 'Reza Maulana', 'Sari Indah', 'Tono Sudrajat', 'Udin Saepudin',
+    'Vina Anjani', 'Wati Suryani', 'Yoga Pranata', 'Zaki Ramadhan', 'Dewa Mahardika',
+    'Citra Lestari', 'Farhan Maulidi', 'Gilang Ramadhan', 'Hana Salsabila', 'Intan Permatasari',
+    'Jihan Aulia', 'Kiki Amalia', 'Lutfi Hakim', 'Mega Wati', 'Nanda Pratiwi',
+    'Olga Marpaung', 'Putra Ananda', 'Qisthi Rahma', 'Rangga Saputra',
+  ];
+
   const usersToInsert = [{ id: mainUserId, name: 'Admin', email: 'admin@perusahaan.com', password: defaultPassword }];
-  // Generate 50 worker users for relations
-  for (let i = 2; i <= 50; i++) {
-    usersToInsert.push({ id: crypto.randomUUID(), name: `User Pekerja ${i}`, email: `pekerja${i}_${crypto.randomUUID().substring(0, 5)}@mail.com`, password: defaultPassword });
+  for (const name of rawEmployees) {
+    const slug = name.toLowerCase().replace(/\s+/g, '.');
+    usersToInsert.push({ id: crypto.randomUUID(), name, email: `${slug}@karyawan.kira.id`, password: defaultPassword });
   }
   await prisma.user.createMany({ data: usersToInsert });
 
@@ -754,6 +769,8 @@ Sedang	2,0	,5	1367000,0	1067000,0	327,0	Generic	Arsitektur	Tata Lingkungan	Lanta
 
         const completionDate = new Date(scheduledDate.getTime() + downtimeHours * 60 * 60 * 1000);
         const daysAgo = (TODAY.getTime() - scheduledDate.getTime()) / (1000 * 60 * 60 * 24);
+        // Maintenance dianggap "dibuat" saat log Scheduled pertama dicatat
+        const scheduledLogAt = addDays(scheduledDate, -randInt(2, 5));
 
         // Determine status for this maintenance
         let mStatus: string;
@@ -783,20 +800,16 @@ Sedang	2,0	,5	1367000,0	1067000,0	327,0	Generic	Arsitektur	Tata Lingkungan	Lanta
           id_teknisi: pickedTech.id,
           maintenance_type: pick(['Preventive', 'Corrective']),
           severity: translatedSeverity,
-          scheduled_date: scheduledDate,
-          start_date: mStatus !== 'Scheduled' ? scheduledDate : null,
-          completion_date: mStatus === 'Completed' ? completionDate : null,
           down_time: mStatus === 'Completed' ? Math.round(avg_downtime) : 0,
           cost: mStatus === 'Completed' ? cost_per_maint : 0,
-          status: mStatus,
           jenis_kerusakan:      pick(jenisKerusakanPool),
           penyebab:             pick(penyebabPool),
           spare_part_digunakan: pick(sparePartPool),
+          created_at: scheduledLogAt,
         });
 
         // ── Maintenance Logs: Scheduled → In Progress → Completed ──
         // Log 1: Scheduled (created 2–5 days before the scheduled date)
-        const scheduledLogAt = addDays(scheduledDate, -randInt(2, 5));
         maintenanceLogsToInsert.push({
           id: crypto.randomUUID(),
           id_maintenance: mId,
@@ -816,7 +829,6 @@ Sedang	2,0	,5	1367000,0	1067000,0	327,0	Generic	Arsitektur	Tata Lingkungan	Lanta
             id_user: assignedUserId,
             status: 'In Progress',
             note: 'Teknisi mulai mengerjakan maintenance',
-            start_date: scheduledDate,
             created_at: scheduledDate,
             down_time: 0,
             cost: 0,
@@ -831,7 +843,6 @@ Sedang	2,0	,5	1367000,0	1067000,0	327,0	Generic	Arsitektur	Tata Lingkungan	Lanta
             id_user: assignedUserId,
             status: 'Completed',
             note: 'Maintenance berhasil diselesaikan',
-            completion_date: completionDate,
             created_at: completionDate,
             down_time: Math.round(avg_downtime),
             cost: cost_per_maint,

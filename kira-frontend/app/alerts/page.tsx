@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { ChevronRight, AlertTriangle, Clock, Eye } from 'lucide-react';
+import { ChevronRight, AlertTriangle, Clock, Eye, Search } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
+import Pagination from '@/components/Pagination';
 import Tooltip from '@/components/Tooltip';
 import TourOverlay from '@/components/TourOverlay';
+import AssetDetailPanel from '@/components/AssetDetailPanel';
 import { authApi } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
 
@@ -72,11 +73,21 @@ const PAGE_SIZE = 10;
 
 type Filter = 'all' | 'critical' | 'high' | 'watch';
 
+const SORT_OPTIONS = [
+  { value: 'rul_asc',   label: 'RUL Terendah' },
+  { value: 'rul_desc',  label: 'RUL Tertinggi' },
+  { value: 'name_asc',  label: 'Nama A–Z' },
+  { value: 'name_desc', label: 'Nama Z–A' },
+];
+
 export default function AlertsPage() {
   const [assets, setAssets] = useState<AlertAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
+  const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('rul_asc');
   const [page, setPage] = useState(1);
+  const [detailAssetId, setDetailAssetId] = useState<string | null>(null);
 
   useEffect(() => {
     const token = authApi.getToken();
@@ -93,11 +104,30 @@ export default function AlertsPage() {
   const high = assets.filter((a) => a.predicted_rul > CRITICAL && a.predicted_rul <= HIGH);
   const watch = assets.filter((a) => a.predicted_rul > HIGH && a.predicted_rul <= WATCH);
 
-  const filtered =
+  const byCategory =
     filter === 'critical' ? critical
     : filter === 'high' ? high
     : filter === 'watch' ? watch
     : assets;
+
+  const q = search.trim().toLowerCase();
+  const searched = q
+    ? byCategory.filter((a) =>
+        a.asset_name.toLowerCase().includes(q) ||
+        (a.merk_nama ?? '').toLowerCase().includes(q) ||
+        (a.kategori_nama ?? '').toLowerCase().includes(q)
+      )
+    : byCategory;
+
+  const filtered = [...searched].sort((a, b) => {
+    switch (sortBy) {
+      case 'rul_desc':  return b.predicted_rul - a.predicted_rul;
+      case 'name_asc':  return a.asset_name.localeCompare(b.asset_name);
+      case 'name_desc': return b.asset_name.localeCompare(a.asset_name);
+      case 'rul_asc':
+      default:          return a.predicted_rul - b.predicted_rul;
+    }
+  });
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -154,9 +184,30 @@ export default function AlertsPage() {
           ))}
         </div>
 
+        {/* Search & Sort */}
+        <div className="flex flex-col sm:flex-row gap-3 mt-6 animate-[enterUp_0.5s_0.15s_ease-out_both]">
+          <div className="relative flex-1">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Cari nama aset, brand, atau kategori..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 text-gray-700 bg-white"
+            />
+          </div>
+          <select
+            value={sortBy}
+            onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+            className="text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+          >
+            {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+
         {/* Filter tabs */}
         <div
-          className="flex gap-2 mt-6 animate-[enterUp_0.5s_0.18s_ease-out_both]"
+          className="flex gap-2 mt-4 animate-[enterUp_0.5s_0.18s_ease-out_both]"
           data-tour="alert-filter-tabs"
         >
           {tabs.map((t) => (
@@ -203,7 +254,8 @@ export default function AlertsPage() {
             return (
               <div
                 key={asset.id}
-                className={`stagger-item bg-white rounded-2xl p-5 shadow-sm border-l-4 ${u.border} hover:shadow-md transition-all duration-300 hover:-translate-y-0.5`}
+                onClick={() => setDetailAssetId(asset.id)}
+                className={`stagger-item bg-white rounded-2xl p-5 shadow-sm border-l-4 ${u.border} hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 cursor-pointer`}
                 style={{ animationDelay: `${i * 45}ms` }}
               >
                 <div className="flex items-center gap-5">
@@ -241,14 +293,7 @@ export default function AlertsPage() {
                     </div>
                   </div>
 
-                  <Tooltip content="Lihat detail aset" position="left">
-                    <Link
-                      href={`/assets/${asset.id}`}
-                      className="shrink-0 text-gray-300 hover:text-gray-600 transition ml-2"
-                    >
-                      <ChevronRight size={18} />
-                    </Link>
-                  </Tooltip>
+                  <ChevronRight size={18} className="shrink-0 text-gray-300 ml-2" />
                 </div>
               </div>
             );
@@ -256,35 +301,21 @@ export default function AlertsPage() {
         </div>
 
         {/* Pagination */}
-        {!loading && totalPages > 1 && (
-          <div className="flex items-center justify-between mt-6 bg-white rounded-2xl px-6 py-4 shadow-sm">
-            <p className="text-xs text-gray-400">
-              {filtered.length} aset · halaman {page} dari {totalPages}
-            </p>
-            <div className="flex gap-1.5">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setPage(p)}
-                  className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
-                    p === page
-                      ? 'bg-blue-600 text-white'
-                      : 'border border-gray-200 text-gray-500 hover:bg-gray-50'
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {!loading && assets.length > 0 && (
-          <div className="mt-4 text-center text-xs text-gray-400">
-            Menampilkan {paginated.length} dari {filtered.length} aset yang memerlukan perhatian
+        {!loading && (
+          <div className="mt-6 bg-white rounded-2xl shadow-sm">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={filtered.length}
+              limit={PAGE_SIZE}
+              itemLabel="aset"
+              onPageChange={setPage}
+            />
           </div>
         )}
       </div>
+
+      <AssetDetailPanel assetId={detailAssetId} onClose={() => setDetailAssetId(null)} />
     </main>
   );
 }
