@@ -3,17 +3,13 @@ dotenv.config();
 
 import express, { Request, Response } from 'express';
 import cors from 'cors';
-const { PrismaClient } = require('@prisma/client');
-import { PrismaPg } from '@prisma/adapter-pg';
 import passport from 'passport';
 import './passport.config';
 import authRoutes from './auth/auth.routes';
 import { authenticateJWT } from './middleware/auth.middleware';
+import prisma from './lib/prisma';
 
 const app = express();
-const prisma = new PrismaClient({
-  adapter: new PrismaPg(process.env.DATABASE_URL || ''),
-});
 
 app.use(
   cors({
@@ -1682,6 +1678,10 @@ app.get('/debug/maintenance-log-test', async (req, res) => {
 console.log("RUNNING CURRENT INDEX TS WITH MAINTENANCE LOG VERSION");
 console.log('Registered maintenance delete route: DELETE /api/maintenances/:id');
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+export { app };
