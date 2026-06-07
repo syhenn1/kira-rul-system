@@ -7,6 +7,10 @@ import requests
 
 load_dotenv()
 
+# Overridable so load tests can point this at a local stub server instead of
+# the real HuggingFace Router (default preserves existing behavior).
+HF_ROUTER_URL = os.getenv("HF_ROUTER_URL", "https://router.huggingface.co/v1/chat/completions")
+
 # Delayed initialization: read env and create client when function called so
 # importing this module doesn't fail when environment isn't available at import time.
 
@@ -39,7 +43,13 @@ def fetch_asset_aggregates(company_id: str, limit: int = 20):
            a.status,
            aph.maintenance_count, aph.average_down_time, aph.total_maintenance_cost,
            aph.max_maintenance_cost, aph.mode_severity, aph.predicted_rul, aph.recorded_at
-    FROM asset_prediction_history aph
+    FROM (
+        SELECT DISTINCT ON (id_asset)
+               id_asset, maintenance_count, average_down_time, total_maintenance_cost,
+               max_maintenance_cost, mode_severity, predicted_rul, recorded_at
+        FROM asset_prediction_history
+        ORDER BY id_asset, recorded_at DESC
+    ) aph
     JOIN assets a ON aph.id_asset = a.id
     JOIN companies c ON a.id_perusahaan = c.id
     LEFT JOIN merk m ON m.id = a.merk_id
@@ -130,12 +140,13 @@ def build_prompt(rows):
         block = (
             f"Asset: {name}\nBrand: {brand}\nCategory: {category}\nStatus: {status}\n"
             f"Maintenance count: {mcount}\nAverage downtime: {avg_dt}\nTotal maintenance cost: {total_cost}\n"
-            f"Max maintenance cost: {max_cost}\nMode severity: {mode_sev}\nPredicted RUL (months): {pred_rul}\nRecorded at: {recorded_at}"
+            f"Max maintenance cost: {max_cost}\nMode severity: {mode_sev}\nPredicted RUL (hari): {pred_rul}\nRecorded at: {recorded_at}"
         )
-        
-        # Rule-based priority: RUL < 24 bulan, status Scrap/Maintenance, atau severity tinggi
+
+        # Rule-based priority: RUL < 730 hari (2 tahun), status Scrap/Maintenance, atau severity tinggi
+        # Threshold: Critical ≤180 hari, High ≤365 hari, Watch ≤730 hari
         is_kritis = False
-        if (pred_rul is not None and pred_rul < 24) or (str(status).lower() in ['scrap', 'maintenance']) or (str(mode_sev).lower() in ['critical', 'high']):
+        if (pred_rul is not None and pred_rul < 730) or (str(status).lower() in ['scrap', 'maintenance']) or (str(mode_sev).lower() in ['critical', 'high']):
             is_kritis = True
             
         if is_kritis:
@@ -155,12 +166,18 @@ def build_prompt(rows):
     instruction = (
         "Anda adalah manajer aset senior yang menulis catatan harian kondisi aset untuk eksekutif perusahaan.\n\n"
         "Tulis 2 kalimat ringkasan dalam Bahasa Indonesia yang terdengar seperti ditulis oleh manusia — lugas, langsung ke inti masalah, tanpa basa-basi.\n\n"
+        "Threshold RUL (Remaining Useful Life) yang berlaku dalam sistem (satuan HARI):\n"
+        "- CRITICAL: RUL ≤ 180 hari — perlu penanganan segera\n"
+        "- HIGH: RUL ≤ 365 hari — prioritas tinggi\n"
+        "- WATCH: RUL ≤ 730 hari — perlu dipantau\n"
+        "- OK: RUL > 730 hari — kondisi baik\n\n"
         "Aturan wajib:\n"
         "1. Mulai langsung dengan kondisi yang paling mendesak dari blok [PRIORITAS TINGGI]. Jangan buka dengan frasa seperti 'Berdasarkan data', 'Berikut adalah', 'Ringkasan menunjukkan', atau sejenisnya.\n"
         "2. Gunakan kata ganti umum, bukan nama spesifik aset atau merek (contoh: 'sejumlah unit mekanikal', 'beberapa perangkat kategori electrical').\n"
         "3. Kalimat kedua boleh menyebut kondisi aset yang normal sebagai konteks perbandingan, atau langsung berisi rekomendasi tindakan.\n"
         "4. Jika tidak ada aset kritis, tulis secara singkat bahwa kondisi operasional aset perusahaan saat ini terpantau baik dan tidak ada tindakan mendesak yang diperlukan.\n"
         "5. Jangan gunakan bullet point, angka berurutan, atau format markdown apapun.\n"
+        "6. Gunakan satuan HARI (bukan bulan) saat menyebut nilai RUL.\n"
     )
 
     prompt_data = (
@@ -179,7 +196,7 @@ def build_prompt(rows):
 def _rule_based_summary(rows) -> str:
     """Fallback: generate a plain-text summary from the data without an LLM."""
     total = len(rows)
-    kritis = [r for r in rows if r[10] is not None and r[10] < 12]
+    kritis = [r for r in rows if r[10] is not None and r[10] < 365]
     normal = total - len(kritis)
     if not kritis:
         return (
@@ -191,7 +208,7 @@ def _rule_based_summary(rows) -> str:
     cat_str = " dan ".join(categories[:2])
     return (
         f"Terdapat {len(kritis)} unit aset kategori {cat_str} yang memerlukan perhatian segera "
-        f"dengan sisa umur di bawah 12 bulan. "
+        f"dengan sisa umur di bawah 365 hari. "
         f"Dari total {total} aset yang dipantau, {normal} unit lainnya masih beroperasi dalam kondisi normal."
     )
 
@@ -215,7 +232,7 @@ def summarize_company_assets(company_id: str, limit: int = 20, temperature: floa
         return {"summary": "Tidak ada data aset untuk diringkas.", "assets": []}
 
     messages, assets_data = build_prompt(rows)
-    url = "https://router.huggingface.co/v1/chat/completions"
+    url = HF_ROUTER_URL
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
         "Content-Type": "application/json",
