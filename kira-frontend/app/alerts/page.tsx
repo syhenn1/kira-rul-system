@@ -19,7 +19,7 @@ const TOUR_STEPS = [
   {
     target: 'alert-filter-tabs',
     title: 'Tab Filter',
-    desc: 'Gunakan tab ini untuk melihat semua aset atau menyaring per kategori: Critical (≤6 bln), High (≤12 bln), atau Watch (≤24 bln).',
+    desc: 'Gunakan tab ini untuk melihat semua aset atau menyaring per kategori: Critical (≤180 hari), High (≤365 hari), atau Watch (≤730 hari).',
   },
   {
     target: 'alert-list',
@@ -28,9 +28,9 @@ const TOUR_STEPS = [
   },
 ];
 
-const CRITICAL = 6;
-const HIGH = 12;
-const WATCH = 24;
+const CRITICAL = 180;
+const HIGH = 365;
+const WATCH = 730;
 
 type AlertAsset = {
   id: string;
@@ -130,9 +130,9 @@ export default function AlertsPage() {
           data-tour="alert-summary-cards"
         >
           {[
-            { key: 'critical' as Filter, count: critical.length, label: 'RUL ≤ 6 bulan', activeColor: 'bg-red-500', textColor: 'text-red-600', tip: 'Aset kritis — perlu penanganan segera dalam 6 bulan' },
-            { key: 'high' as Filter, count: high.length, label: 'RUL ≤ 12 bulan', activeColor: 'bg-orange-500', textColor: 'text-orange-500', tip: 'Prioritas tinggi — sisa usia pakai di bawah 12 bulan' },
-            { key: 'watch' as Filter, count: watch.length, label: 'RUL ≤ 24 bulan', activeColor: 'bg-yellow-500', textColor: 'text-yellow-600', tip: 'Perlu dipantau — sisa usia pakai di bawah 24 bulan' },
+            { key: 'critical' as Filter, count: critical.length, label: 'RUL ≤ 180 hari', activeColor: 'bg-red-500', textColor: 'text-red-600', tip: 'Aset kritis — perlu penanganan segera dalam 180 hari' },
+            { key: 'high' as Filter, count: high.length, label: 'RUL ≤ 365 hari', activeColor: 'bg-orange-500', textColor: 'text-orange-500', tip: 'Prioritas tinggi — sisa usia pakai di bawah 365 hari' },
+            { key: 'watch' as Filter, count: watch.length, label: 'RUL ≤ 730 hari', activeColor: 'bg-yellow-500', textColor: 'text-yellow-600', tip: 'Perlu dipantau — sisa usia pakai di bawah 730 hari' },
           ].map(({ key, count, label, activeColor, textColor, tip }) => (
             <Tooltip key={key} content={tip} position="bottom">
               <button
@@ -164,9 +164,9 @@ export default function AlertsPage() {
               key={t.key}
               content={
                 t.key === 'all' ? 'Tampilkan semua aset yang memerlukan perhatian'
-                : t.key === 'critical' ? 'RUL ≤ 6 bulan — kritis'
-                : t.key === 'high' ? 'RUL ≤ 12 bulan — prioritas tinggi'
-                : 'RUL ≤ 24 bulan — perlu dipantau'
+                : t.key === 'critical' ? 'RUL ≤ 180 hari — kritis'
+                : t.key === 'high' ? 'RUL ≤ 365 hari — prioritas tinggi'
+                : 'RUL ≤ 730 hari — perlu dipantau'
               }
               position="bottom"
             >
@@ -236,7 +236,7 @@ export default function AlertsPage() {
                         />
                       </div>
                       <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">
-                        {asset.predicted_rul} bulan
+                        {asset.predicted_rul} hari
                       </span>
                     </div>
                   </div>

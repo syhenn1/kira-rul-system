@@ -164,7 +164,7 @@ export default function DashboardPage() {
                 <StatCard
                   title="Perlu Perhatian"
                   value={dashData ? String(alerts.critical + alerts.high) : '—'}
-                  subtitle="RUL ≤ 12 Bulan"
+                  subtitle="RUL ≤ 365 Hari"
                 />
               </div>
             </Tooltip>
@@ -208,7 +208,7 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between">
                     <p className="text-gray-800 font-semibold text-sm">{alerts.critical} Aset Kritis</p>
                     <span className="bg-red-100 text-red-600 px-2.5 py-0.5 rounded-full text-xs font-medium">
-                      RUL ≤ 6 bln
+                      RUL ≤ 180 hari
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">Perlu penanganan segera</p>
@@ -217,7 +217,7 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between">
                     <p className="text-gray-800 font-semibold text-sm">{alerts.high} Prioritas Tinggi</p>
                     <span className="bg-orange-100 text-orange-600 px-2.5 py-0.5 rounded-full text-xs font-medium">
-                      RUL ≤ 12 bln
+                      RUL ≤ 365 hari
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">Rencanakan maintenance</p>
@@ -226,7 +226,7 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between">
                     <p className="text-gray-800 font-semibold text-sm">{alerts.watch} Perlu Dipantau</p>
                     <span className="bg-yellow-100 text-yellow-700 px-2.5 py-0.5 rounded-full text-xs font-medium">
-                      RUL ≤ 24 bln
+                      RUL ≤ 730 hari
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">Pantau berkala</p>

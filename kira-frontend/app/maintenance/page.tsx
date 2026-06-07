@@ -47,6 +47,15 @@ type RelatedUser = {
 
 type LookupRef = { id: string; kode: string; nama: string } | null;
 
+type TechnicianOption = {
+  id: string;
+  name: string;
+  email: string;
+  specialization: string;
+  phone?: string | null;
+  status: string;
+};
+
 type MaintenanceItem = {
   id: string;
   maintenance_type: string;
@@ -71,6 +80,7 @@ type MaintenanceItem = {
   };
   user?: RelatedUser;
   assignedTechnician?: RelatedUser | null;
+  technician?: TechnicianOption | null;
   logs?: Array<{
     id: string;
     status: string;
@@ -715,7 +725,7 @@ function MaintenanceDetailModal({
               <SectionTitle title="People" />
               <div className="space-y-5 mt-6">
                 <PersonBlock title="Created By" user={maintenance.user} />
-                <PersonBlock title="Assigned Technician" user={maintenance.assignedTechnician} />
+                <TechnicianBlock technician={maintenance.technician} />
               </div>
             </section>
 
@@ -811,12 +821,13 @@ function EditMaintenanceModal({
   onUpdated: (maintenance: MaintenanceItem) => void;
 }) {
   const [assets, setAssets] = useState<AssetOption[]>([]);
+  const [technicians, setTechnicians] = useState<TechnicianOption[]>([]);
   const [assetError, setAssetError] = useState<string | null>(null);
   const [isLoadingAssets, setIsLoadingAssets] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     id_asset: maintenance.asset?.id || '',
-    assigned_technician_id: maintenance.assignedTechnician?.id || '',
+    id_teknisi: maintenance.technician?.id || '',
     maintenance_type: maintenance.maintenance_type || 'Preventive',
     severity: maintenance.severity || 'Medium',
     status: currentStatus || maintenance.status || 'Scheduled',
@@ -830,25 +841,20 @@ function EditMaintenanceModal({
 
   useEffect(() => {
     const controller = new AbortController();
+    const token = localStorage.getItem('kira_token');
 
     const fetchAssets = async () => {
       setIsLoadingAssets(true);
       setAssetError(null);
-
       try {
-        const token = localStorage.getItem('kira_token');
         const response = await fetch(`${API_URL}/api/assets`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
-
         if (!response.ok) {
           const err = await response.json().catch(() => null);
           throw new Error(err?.error || err?.details || 'Failed to fetch assets');
         }
-
         const result = await response.json();
         setAssets(result.data || []);
       } catch (fetchError) {
@@ -860,7 +866,21 @@ function EditMaintenanceModal({
       }
     };
 
+    const fetchTechnicians = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/technicians`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        if (response.ok) {
+          const result = await response.json();
+          setTechnicians(result.technicians || []);
+        }
+      } catch { /* non-fatal */ }
+    };
+
     fetchAssets();
+    fetchTechnicians();
 
     return () => controller.abort();
   }, []);
@@ -892,7 +912,7 @@ function EditMaintenanceModal({
         },
         body: JSON.stringify({
           id_asset: formData.id_asset,
-          assigned_technician_id: formData.assigned_technician_id || undefined,
+          id_teknisi: formData.id_teknisi || undefined,
           maintenance_type: formData.maintenance_type,
           severity: formData.severity,
           status: formData.status,
@@ -990,7 +1010,21 @@ function EditMaintenanceModal({
                 )}
               </div>
 
-              <EditInput label="Assigned Technician ID" value={formData.assigned_technician_id} onChange={(value) => handleChange('assigned_technician_id', value)} />
+              <div>
+                <label className="text-sm font-medium text-gray-700">Teknisi</label>
+                <select
+                  value={formData.id_teknisi}
+                  onChange={(e) => handleChange('id_teknisi', e.target.value)}
+                  className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
+                >
+                  <option value="">— Pilih Teknisi —</option>
+                  {technicians.filter(t => t.status !== 'Tidak Aktif').map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} · {t.specialization}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <EditSelect label="Maintenance Type" value={formData.maintenance_type} options={['Preventive', 'Corrective', 'Predictive', 'Condition-Based']} onChange={(value) => handleChange('maintenance_type', value)} />
               <EditSelect label="Severity" value={formData.severity} options={['Low', 'Medium', 'High', 'Critical']} onChange={(value) => handleChange('severity', value)} />
               <EditSelect label="Status" value={formData.status} options={['Scheduled', 'Assigned', 'In Progress', 'Completed', 'Cancelled']} onChange={(value) => handleChange('status', value)} />
@@ -1339,15 +1373,27 @@ function PersonBlock({
 }) {
   return (
     <div className="border border-gray-100 rounded-2xl p-5">
-      <p className="text-sm text-gray-400">
-        {title}
-      </p>
-      <p className="font-semibold text-gray-800 mt-2">
-        {user?.name || '-'}
-      </p>
-      <p className="text-sm text-gray-500 mt-1">
-        {user?.email || '-'}
-      </p>
+      <p className="text-sm text-gray-400">{title}</p>
+      <p className="font-semibold text-gray-800 mt-2">{user?.name || '-'}</p>
+      <p className="text-sm text-gray-500 mt-1">{user?.email || '-'}</p>
+    </div>
+  );
+}
+
+function TechnicianBlock({ technician }: { technician?: TechnicianOption | null }) {
+  return (
+    <div className="border border-gray-100 rounded-2xl p-5">
+      <p className="text-sm text-gray-400">Teknisi</p>
+      {technician ? (
+        <>
+          <p className="font-semibold text-gray-800 mt-2">{technician.name}</p>
+          <p className="text-sm text-blue-600 font-medium mt-0.5">{technician.specialization}</p>
+          <p className="text-sm text-gray-500 mt-0.5">{technician.email}</p>
+          {technician.phone && <p className="text-sm text-gray-500">{technician.phone}</p>}
+        </>
+      ) : (
+        <p className="font-semibold text-gray-400 mt-2">-</p>
+      )}
     </div>
   );
 }

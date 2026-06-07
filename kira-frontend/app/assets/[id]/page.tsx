@@ -11,6 +11,18 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import { apiFetch } from '@/lib/api';
 import { authApi } from '@/lib/auth';
 
+type MaintenanceLog = {
+  id: string;
+  status: string;
+  note: string;
+  start_date: string | null;
+  completion_date: string | null;
+  down_time: number;
+  cost: number;
+  created_at: string;
+  user: { name: string } | null;
+};
+
 type MaintenanceRecord = {
   id: string;
   maintenance_type: string;
@@ -21,6 +33,7 @@ type MaintenanceRecord = {
   down_time: number;
   cost: number;
   user: { name: string } | null;
+  logs: MaintenanceLog[];
 };
 
 type PredictionHistory = {
@@ -49,12 +62,23 @@ type Asset = {
   prediction_history: PredictionHistory[];
 };
 
+// Maps each status to a visual step index (0=Scheduled, 1=InProgress, 2=Completed)
+const STATUS_STEP: Record<string, number> = {
+  Scheduled: 0,
+  'In Progress': 1,
+  Completed: 2,
+};
+
+const STEP_ICONS = ['📅', '🔧', '✅'];
+const STEP_LABELS = ['Scheduled', 'In Progress', 'Completed'];
+
 export default function AssetDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [asset, setAsset] = useState<Asset | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  const [expandedMaintId, setExpandedMaintId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -62,8 +86,14 @@ export default function AssetDetailPage() {
     apiFetch(`/api/assets/${id}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => r.json())
-      .then((body) => setAsset(body.data))
+      .then(async (r) => {
+        const body = await r.json();
+        if (!r.ok) {
+          console.error('Asset detail error:', body);
+          return;
+        }
+        setAsset(body.data);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [id]);
@@ -104,11 +134,16 @@ export default function AssetDetailPage() {
     return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
   };
 
+  const formatDateTime = (d: string | null) => {
+    if (!d) return '-';
+    return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
   const rulColor = (rul: number | null) => {
     if (rul == null) return 'text-gray-400';
-    if (rul <= 6)  return 'text-red-600';
-    if (rul <= 12) return 'text-orange-500';
-    if (rul <= 24) return 'text-yellow-600';
+    if (rul <= 180) return 'text-red-600';
+    if (rul <= 365) return 'text-orange-500';
+    if (rul <= 730) return 'text-yellow-600';
     return 'text-green-600';
   };
 
@@ -201,7 +236,7 @@ export default function AssetDetailPage() {
               <div className="flex flex-col lg:flex-row gap-8">
 
                 {/* IMAGE */}
-                <div className="w-full lg:w-[280px] h-[280px] rounded-3xl overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
+                <div className="w-full lg:w-70 h-70 rounded-3xl overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
                   {asset.asset_image ? (
                     <img src={asset.asset_image} alt={asset.asset_name} className="w-full h-full object-cover" />
                   ) : (
@@ -226,7 +261,7 @@ export default function AssetDetailPage() {
                     <Info title="Tingkat Kekritisan" value={asset.criticality_level} />
                     <Info title="Tanggal Pembelian"  value={formatDate(asset.purchase_date)} />
                     <Info title="Lokasi Gedung"   value={asset.gedung?.nama ?? '-'} />
-                    <Info title="Initial Useful Life" value={`${asset.initial_useful_life} bulan`} />
+                    <Info title="Initial Useful Life" value={`${asset.initial_useful_life} hari`} />
                   </div>
                 </div>
               </div>
@@ -240,14 +275,14 @@ export default function AssetDetailPage() {
                 <div>
                   <p className="text-sm text-gray-400">Prediksi RUL</p>
                   <p className={`mt-2 text-4xl font-bold ${rulColor(asset.predicted_rul)}`}>
-                    {asset.predicted_rul != null ? `${asset.predicted_rul} bln` : 'N/A'}
+                    {asset.predicted_rul != null ? `${asset.predicted_rul} hari` : 'N/A'}
                   </p>
                   {asset.predicted_rul != null && (
                     <p className={`text-xs mt-1 font-medium ${rulColor(asset.predicted_rul)}`}>
-                      {asset.predicted_rul <= 6  ? '⚠ CRITICAL — Segera ganti' :
-                       asset.predicted_rul <= 12 ? '⚠ HIGH — Butuh perhatian' :
-                       asset.predicted_rul <= 24 ? '⚡ WATCH — Pantau rutin' :
-                                                   '✓ OK — Kondisi baik'}
+                      {asset.predicted_rul <= 180 ? '⚠ CRITICAL — Segera ganti' :
+                       asset.predicted_rul <= 365 ? '⚠ HIGH — Butuh perhatian' :
+                       asset.predicted_rul <= 730 ? '⚡ WATCH — Pantau rutin' :
+                                                    '✓ OK — Kondisi baik'}
                     </p>
                   )}
                 </div>
@@ -262,13 +297,13 @@ export default function AssetDetailPage() {
                   <p className="text-sm text-gray-400">Kondisi</p>
                   <p className={`mt-2 font-semibold ${
                     asset.predicted_rul == null       ? 'text-gray-500' :
-                    asset.predicted_rul <= 6          ? 'text-red-600'   :
-                    asset.predicted_rul <= 24         ? 'text-orange-500' :
+                    asset.predicted_rul <= 180        ? 'text-red-600'   :
+                    asset.predicted_rul <= 730        ? 'text-orange-500' :
                                                        'text-green-600'
                   }`}>
                     {asset.predicted_rul == null     ? 'Belum diprediksi' :
-                     asset.predicted_rul <= 6        ? 'Kritis' :
-                     asset.predicted_rul <= 24       ? 'Perlu Perhatian' :
+                     asset.predicted_rul <= 180      ? 'Kritis' :
+                     asset.predicted_rul <= 730      ? 'Perlu Perhatian' :
                                                       'Baik'}
                   </p>
                 </div>
@@ -310,7 +345,7 @@ export default function AssetDetailPage() {
                       <Info title="Status"           value={asset.status} />
                       <Info title="Gedung"           value={asset.gedung?.nama ?? '-'} />
                       <Info title="Tanggal Pembelian" value={formatDate(asset.purchase_date)} />
-                      <Info title="Initial Useful Life" value={`${asset.initial_useful_life} bulan`} />
+                      <Info title="Initial Useful Life" value={`${asset.initial_useful_life} hari`} />
                     </div>
                   </div>
                 )}
@@ -320,31 +355,130 @@ export default function AssetDetailPage() {
                     {asset.maintenances.length === 0 ? (
                       <p className="text-gray-400 text-sm">Belum ada histori maintenance.</p>
                     ) : (
-                      asset.maintenances.map((m) => (
-                        <div key={m.id} className="border rounded-2xl p-5">
-                          <div className="flex items-start justify-between gap-4 flex-wrap">
-                            <div>
-                              <h4 className="font-semibold text-[#111827]">{m.maintenance_type}</h4>
-                              <p className="text-sm text-gray-400 mt-1">{formatDate(m.scheduled_date)}</p>
-                              {m.user && <p className="text-xs text-gray-400 mt-0.5">Oleh: {m.user.name}</p>}
-                            </div>
-                            <div className="flex items-center gap-3 flex-wrap">
-                              <span className={`text-xs font-semibold ${severityColor(m.severity)}`}>
-                                {m.severity}
-                              </span>
-                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColor(m.status)}`}>
-                                {m.status}
-                              </span>
-                            </div>
+                      asset.maintenances.map((m) => {
+                        const isExpanded = expandedMaintId === m.id;
+                        const currentStep = STATUS_STEP[m.status] ?? 0;
+                        return (
+                          <div key={m.id} className="border rounded-2xl overflow-hidden">
+                            {/* Card header */}
+                            <button
+                              onClick={() => setExpandedMaintId(isExpanded ? null : m.id)}
+                              className="w-full text-left p-5 hover:bg-gray-50 transition"
+                            >
+                              <div className="flex items-start justify-between gap-4 flex-wrap">
+                                <div>
+                                  <h4 className="font-semibold text-[#111827]">{m.maintenance_type}</h4>
+                                  <p className="text-sm text-gray-400 mt-1">{formatDate(m.scheduled_date)}</p>
+                                  {m.user && <p className="text-xs text-gray-400 mt-0.5">Oleh: {m.user.name}</p>}
+                                </div>
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  <span className={`text-xs font-semibold ${severityColor(m.severity)}`}>
+                                    {m.severity}
+                                  </span>
+                                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColor(m.status)}`}>
+                                    {m.status}
+                                  </span>
+                                  {(m.down_time > 0 || m.cost > 0) && (
+                                    <span className="text-xs text-gray-400">
+                                      {m.down_time > 0 && `${m.down_time}h downtime`}
+                                      {m.down_time > 0 && m.cost > 0 && ' · '}
+                                      {m.cost > 0 && `Rp ${m.cost.toLocaleString('id-ID')}`}
+                                    </span>
+                                  )}
+                                  <span className="text-gray-400 text-sm">{isExpanded ? '▲' : '▼'}</span>
+                                </div>
+                              </div>
+
+                              {/* Mini progress bar */}
+                              <div className="flex items-center gap-1 mt-4">
+                                {STEP_LABELS.map((label, idx) => {
+                                  const done    = idx <= currentStep;
+                                  const active  = idx === currentStep;
+                                  return (
+                                    <div key={label} className="flex items-center gap-1 flex-1">
+                                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition ${
+                                        active  ? 'bg-blue-600 text-white ring-2 ring-blue-200' :
+                                        done    ? 'bg-green-500 text-white' :
+                                                  'bg-gray-200 text-gray-400'
+                                      }`}>
+                                        {done && !active ? '✓' : idx + 1}
+                                      </div>
+                                      <p className={`text-xs truncate ${done ? 'text-gray-700 font-medium' : 'text-gray-400'}`}>
+                                        {label}
+                                      </p>
+                                      {idx < 2 && (
+                                        <div className={`h-0.5 flex-1 rounded ${idx < currentStep ? 'bg-green-400' : 'bg-gray-200'}`} />
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </button>
+
+                            {/* Timeline detail (expanded) */}
+                            {isExpanded && (
+                              <div className="border-t px-5 py-6 bg-gray-50">
+                                {m.logs.length === 0 ? (
+                                  <p className="text-gray-400 text-sm">Tidak ada log tersedia untuk maintenance ini.</p>
+                                ) : (
+                                  <div className="relative">
+                                    {/* Vertical line */}
+                                    <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />
+
+                                    <div className="space-y-6">
+                                      {m.logs.map((log, li) => {
+                                        const step = STATUS_STEP[log.status] ?? 0;
+                                        const dotColors = [
+                                          'bg-blue-500',   // Scheduled
+                                          'bg-yellow-500', // In Progress
+                                          'bg-green-500',  // Completed
+                                        ];
+                                        const dotColor = dotColors[step] ?? 'bg-gray-400';
+                                        return (
+                                          <div key={log.id} className="flex gap-5 relative">
+                                            {/* Dot */}
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm shrink-0 shadow-sm z-10 ${dotColor}`}>
+                                              {STEP_ICONS[step]}
+                                            </div>
+
+                                            {/* Content */}
+                                            <div className={`flex-1 bg-white rounded-2xl p-4 border shadow-sm ${li === m.logs.length - 1 ? 'border-l-4 border-l-blue-300' : ''}`}>
+                                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColor(log.status)}`}>
+                                                  {log.status}
+                                                </span>
+                                                <span className="text-xs text-gray-400">{formatDateTime(log.created_at)}</span>
+                                              </div>
+                                              <p className="text-sm text-gray-700 mt-2">{log.note}</p>
+                                              {log.user && (
+                                                <p className="text-xs text-gray-400 mt-1">Oleh: {log.user.name}</p>
+                                              )}
+                                              <div className="flex gap-4 mt-2 flex-wrap">
+                                                {log.start_date && (
+                                                  <span className="text-xs text-gray-500">Mulai: {formatDate(log.start_date)}</span>
+                                                )}
+                                                {log.completion_date && (
+                                                  <span className="text-xs text-gray-500">Selesai: {formatDate(log.completion_date)}</span>
+                                                )}
+                                                {log.down_time > 0 && (
+                                                  <span className="text-xs text-gray-500">Downtime: {log.down_time}h</span>
+                                                )}
+                                                {log.cost > 0 && (
+                                                  <span className="text-xs text-gray-500">Biaya: Rp {log.cost.toLocaleString('id-ID')}</span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          {(m.down_time > 0 || m.cost > 0) && (
-                            <div className="flex gap-6 mt-3 text-sm text-gray-500">
-                              {m.down_time > 0 && <span>Downtime: {m.down_time} hari</span>}
-                              {m.cost > 0 && <span>Biaya: Rp {m.cost.toLocaleString('id-ID')}</span>}
-                            </div>
-                          )}
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 )}
@@ -362,7 +496,7 @@ export default function AssetDetailPage() {
                           </div>
                           <div className="text-right">
                             <p className={`text-2xl font-bold ${rulColor(p.predicted_rul)}`}>
-                              {p.predicted_rul} bln
+                              {p.predicted_rul} hari
                             </p>
                             <p className="text-xs text-gray-400 mt-0.5">predicted RUL</p>
                           </div>
@@ -380,7 +514,7 @@ export default function AssetDetailPage() {
               <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(asset.id)}`}
                 alt="qr"
-                className="w-[220px] mt-8"
+                className="w-55 mt-8"
               />
               <p className="text-gray-500 mt-4 text-sm text-center break-all">{asset.asset_name}</p>
             </div>

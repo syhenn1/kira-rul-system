@@ -15,18 +15,20 @@ import { authApi } from '@/lib/auth';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 // ── RUL zone config (unit: hari) ──────────────────────────────────────────────
-const MAX_RUL_DAYS = 1825; // 5 tahun = 60 bulan × 30.4 hari
+const MAX_RUL_DAYS = 730; // 2 tahun = batas Watch threshold sistem
 
 function getRulZone(rul: number) {
-  if (rul <= 90)  return { label: 'Kritis',  color: 'text-red-500',     ringColor: '#ef4444', bar: 'bg-red-500',     ring: 'ring-red-200',     bg: 'bg-red-50',     rec: 'Segera jadwalkan penggantian atau perbaikan besar. Risiko kegagalan tinggi dalam 3 bulan ke depan.' };
-  if (rul <= 180) return { label: 'Tinggi',  color: 'text-orange-500',  ringColor: '#f97316', bar: 'bg-orange-500',  ring: 'ring-orange-200',  bg: 'bg-orange-50',  rec: 'Maintenance mendesak diperlukan dalam 3–6 bulan ke depan sebelum kondisi memburuk.' };
-  if (rul <= 365) return { label: 'Sedang',  color: 'text-yellow-600',  ringColor: '#ca8a04', bar: 'bg-yellow-500',  ring: 'ring-yellow-200',  bg: 'bg-yellow-50',  rec: 'Pantau kondisi aset secara berkala dan rencanakan maintenance dalam 6–12 bulan.' };
+  if (rul <= 180) return { label: 'Kritis',  color: 'text-red-500',     ringColor: '#ef4444', bar: 'bg-red-500',     ring: 'ring-red-200',     bg: 'bg-red-50',     rec: 'Segera jadwalkan penggantian atau perbaikan besar. Risiko kegagalan tinggi dalam 6 bulan ke depan.' };
+  if (rul <= 365) return { label: 'Tinggi',  color: 'text-orange-500',  ringColor: '#f97316', bar: 'bg-orange-500',  ring: 'ring-orange-200',  bg: 'bg-orange-50',  rec: 'Maintenance mendesak diperlukan dalam 6–12 bulan ke depan sebelum kondisi memburuk.' };
+  if (rul <= 730) return { label: 'Sedang',  color: 'text-yellow-600',  ringColor: '#ca8a04', bar: 'bg-yellow-500',  ring: 'ring-yellow-200',  bg: 'bg-yellow-50',  rec: 'Pantau kondisi aset secara berkala dan rencanakan maintenance dalam 1–2 tahun.' };
   return           { label: 'Baik',    color: 'text-emerald-600', ringColor: '#10b981', bar: 'bg-emerald-500', ring: 'ring-emerald-200', bg: 'bg-emerald-50', rec: 'Aset dalam kondisi baik. Lanjutkan program maintenance preventif sesuai jadwal.' };
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type GedungOption = { id: string; nama: string; kode: string };
+
+type TechnicianOption = { id: string; name: string; specialization: string; phone?: string | null; status: string };
 
 type LookupRef = { id: string; kode: string; nama: string } | null;
 
@@ -270,6 +272,9 @@ export default function AddMaintenancePage() {
   const [isLoadingAssets, setIsLoadingAssets] = useState(true);
   const [assetError, setAssetError] = useState<string | null>(null);
 
+  // Technicians
+  const [technicians, setTechnicians] = useState<TechnicianOption[]>([]);
+
   const [preselectedAssetId] = useState(() => {
     if (typeof window === 'undefined') return '';
     return new URLSearchParams(window.location.search).get('assetId') || '';
@@ -279,6 +284,7 @@ export default function AddMaintenancePage() {
 
   const [formData, setFormData] = useState({
     id_asset: '',
+    id_teknisi: '',
     maintenance_type: 'Preventive',
     severity: 'Medium',
     scheduled_date: '',
@@ -301,6 +307,10 @@ export default function AddMaintenancePage() {
     fetch(`${API_URL}/api/gedung`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then((d) => setGedungList(d.gedung || []))
+      .catch(() => {});
+    fetch(`${API_URL}/api/technicians`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((d) => setTechnicians(d.technicians || []))
       .catch(() => {});
   }, []);
 
@@ -549,6 +559,32 @@ export default function AddMaintenancePage() {
                 <Input label="Maintenance Cost (Biaya Perbaikan)" placeholder="e.g. 500000"
                   type="number" value={formData.cost}
                   onChange={(e) => handleInputChange('cost', e.target.value)} />
+
+                <div className="md:col-span-2">
+                  <label className="text-sm font-medium text-gray-700">Teknisi</label>
+                  <select
+                    value={formData.id_teknisi}
+                    onChange={(e) => handleInputChange('id_teknisi', e.target.value)}
+                    className="w-full mt-2 border border-gray-200 rounded-2xl px-4 py-4 outline-none focus:ring-2 focus:ring-blue-500 text-black"
+                  >
+                    <option value="">— Pilih Teknisi (opsional) —</option>
+                    {technicians.filter(t => t.status !== 'Tidak Aktif').map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} · {t.specialization}{t.phone ? ` · ${t.phone}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {formData.id_teknisi && (() => {
+                    const tech = technicians.find(t => t.id === formData.id_teknisi);
+                    return tech ? (
+                      <div className="mt-2 px-4 py-2.5 rounded-xl bg-blue-50 border border-blue-100 text-sm text-blue-800">
+                        <span className="font-semibold">{tech.name}</span>
+                        <span className="text-blue-500"> · {tech.specialization}</span>
+                        {tech.phone && <span className="text-blue-400"> · {tech.phone}</span>}
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
               </div>
             </section>
 
