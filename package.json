@@ -6,7 +6,7 @@
   "scripts": {
     "dev:frontend": "npm run dev --prefix kira-frontend",
     "dev:backend": "npm run dev --prefix kira-backend",
-    "dev:ai": "cd kira-ai-engine && .\\venv\\Scripts\\uvicorn app:app --host 0.0.0.0 --port 8000 --reload",
+    "dev:ai": "cd kira-ai-engine && .\\venv\\Scripts\\python -u run_dev.py",
     "dev": "concurrently -c \"blue,green,magenta\" -n \"FRONTEND,BACKEND,AI_ENGINE\" \"npm run dev:frontend\" \"npm run dev:backend\" \"npm run dev:ai\""
   },
   "repository": {
