@@ -28,14 +28,6 @@ export default function Home() {
         </div>
 
         <div className="max-w-7xl mx-auto relative z-10 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium mb-8 animate-fade-in">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-            </span>
-            Kira AI v2.0 is now live
-          </div>
-          
           <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-zinc-900 dark:text-white mb-6 animate-slide-up">
             Intelligent Asset <br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
@@ -47,13 +39,25 @@ export default function Home() {
             Harness the power of AI to predict Remaining Useful Life (RUL) and automatically classify maintenance severity before critical failures occur.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-slide-up" style={{ animationDelay: "0.2s" }}>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-8 animate-slide-up" style={{ animationDelay: "0.2s" }}>
+            <a href="#fitur" className="px-6 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors">
+              Fitur
+            </a>
+            <a href="#tentang" className="px-6 py-2 rounded-full bg-purple-600 hover:bg-purple-700 text-white font-medium transition-colors">
+              Tentang KIRA
+            </a>
+            <a href="#how-it-works" className="px-6 py-2 rounded-full bg-pink-600 hover:bg-pink-700 text-white font-medium transition-colors">
+              Cara Kerja
+            </a>
+            <a href="#tim" className="px-6 py-2 rounded-full bg-green-600 hover:bg-green-700 text-white font-medium transition-colors">
+              Tim
+            </a>
           </div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section className="py-20 px-6 bg-white dark:bg-zinc-950/50 border-y border-zinc-200 dark:border-zinc-900">
+      <section id="fitur" className="py-20 px-6 bg-white dark:bg-zinc-950/50 border-y border-zinc-200 dark:border-zinc-900">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-zinc-900 dark:text-white mb-4">Fitur Utama</h2>
@@ -85,15 +89,12 @@ export default function Home() {
       </section>
 
       {/* About Section */}
-      <section className="py-20 px-6 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-zinc-900 dark:to-zinc-900 border-y border-zinc-200 dark:border-zinc-800">
+      <section id="tentang" className="py-20 px-6 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-zinc-900 dark:to-zinc-900 border-y border-zinc-200 dark:border-zinc-800">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-zinc-900 dark:text-white mb-4">Tentang Kami</h2>
-            <h3 className="text-2xl font-semibold text-blue-600 dark:text-blue-400 mb-6">
-              Efisiensi Biaya & Zero Downtime untuk Aset Kritis Perusahaan Anda
-            </h3>
-            <p className="text-lg text-zinc-700 dark:text-zinc-300 max-w-3xl mx-auto leading-relaxed">
-              KIRA menggunakan teknologi <span className="font-semibold">Deep Learning</span> untuk memprediksi <span className="font-semibold">Remaining Useful Life (RUL)</span> aset Anda dengan akurasi tinggi. Dengan analisis pola mendalam dari data historis, sensor, dan log maintenance, kami membantu Anda membuat keputusan proaktif yang menghemat biaya dan mencegah downtime tak terduga.
+            <h2 className="text-3xl md:text-4xl font-bold text-zinc-900 dark:text-white mb-4">Tentang KIRA</h2>
+            <p className="text-zinc-700 dark:text-zinc-300 max-w-2xl mx-auto">
+              KIRA menggunakan <span className="font-semibold">Deep Learning</span> untuk memprediksi <span className="font-semibold">Remaining Useful Life (RUL)</span> dengan akurat, membantu Anda mengambil keputusan maintenance yang tepat dan mengurangi biaya operasional.
             </p>
           </div>
 
@@ -102,7 +103,7 @@ export default function Home() {
               <div className="text-5xl mb-4">🎯</div>
               <h4 className="text-xl font-semibold text-zinc-900 dark:text-white mb-3">Prediksi Akurat (RUL)</h4>
               <p className="text-zinc-600 dark:text-zinc-400">
-                Hitung sisa waktu pakai setiap aset dengan presisi tinggi menggunakan model machine learning yang telah dilatih dengan jutaan data point, memungkinkan perencanaan maintenance jangka panjang yang lebih baik.
+                Prediksi sisa waktu pakai aset dengan akurasi tinggi untuk perencanaan maintenance yang lebih baik.
               </p>
             </div>
 
@@ -110,7 +111,7 @@ export default function Home() {
               <div className="text-5xl mb-4">⚡</div>
               <h4 className="text-xl font-semibold text-zinc-900 dark:text-white mb-3">Klasifikasi Otomatis</h4>
               <p className="text-zinc-600 dark:text-zinc-400">
-                Tentukan tingkat keparahan dan urgensi setiap maintenance report secara otomatis berdasarkan analisis gejala dan data historis, sehingga tim Anda dapat memprioritaskan pekerjaan dengan lebih efektif.
+                Klasifikasi otomatis tingkat keparahan maintenance untuk prioritas pekerjaan yang lebih efektif.
               </p>
             </div>
 
@@ -118,7 +119,7 @@ export default function Home() {
               <div className="text-5xl mb-4">💰</div>
               <h4 className="text-xl font-semibold text-zinc-900 dark:text-white mb-3">Efisiensi Biaya</h4>
               <p className="text-zinc-600 dark:text-zinc-400">
-                Kurangi maintenance tak terencana hingga mencapai zero-downtime dengan strategi preventive maintenance yang tepat sasaran, menghemat biaya operasional dan meningkatkan produktivitas aset Anda secara signifikan.
+                Kurangi maintenance tak terencana dan hemat biaya operasional dengan strategi preventive yang tepat sasaran.
               </p>
             </div>
           </div>
@@ -162,7 +163,7 @@ export default function Home() {
       </section>
 
       {/* Team Section */}
-      <section className="py-20 px-6 bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-950/50 dark:to-[#050505]">
+      <section id="tim" className="py-20 px-6 bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-950/50 dark:to-[#050505]">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-zinc-900 dark:text-white mb-4">Tim Pengembang</h2>
