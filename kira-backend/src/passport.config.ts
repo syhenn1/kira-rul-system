@@ -36,6 +36,14 @@ passport.use(
               profile_picture: profile.photos?.[0]?.value,
             },
           });
+
+          // Auto-join the first company if one exists (single-tenant setup)
+          const company = await prisma.company.findFirst();
+          if (company) {
+            await prisma.companyMember.create({
+              data: { id_user: user.id, id_perusahaan: company.id, role: 'Member' },
+            });
+          }
         }
 
         return done(null, user);

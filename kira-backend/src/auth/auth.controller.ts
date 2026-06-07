@@ -28,6 +28,14 @@ export const register = async (req: Request, res: Response) => {
       data: { name, email, password: hashed },
     });
 
+    // Auto-join the first company if one exists (single-tenant setup)
+    const company = await prisma.company.findFirst();
+    if (company) {
+      await prisma.companyMember.create({
+        data: { id_user: user.id, id_perusahaan: company.id, role: 'Member' },
+      });
+    }
+
     const token = signToken(user.id, user.email);
     return res.status(201).json({
       token,

@@ -40,13 +40,24 @@ app.use('/api/auth', authRoutes);
 app.get('/api/assets', authenticateJWT, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const { search = '', status = '', page = '1', limit = '10' } = req.query;
+    const {
+      search = '', status = '', page = '1', limit = '10',
+      sort_by = 'name_asc',
+      rul_min = '', rul_max = '',
+      category = '', criticality = '', gedung_id = '',
+    } = req.query;
 
-    const pageNumber = Math.max(1, parseInt(String(page), 10) || 1);
+    const pageNumber  = Math.max(1, parseInt(String(page), 10) || 1);
     const limitNumber = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 10));
-    const skip = (pageNumber - 1) * limitNumber;
-    const searchText = String(search).trim();
-    const statusText = String(status).trim();
+    const skip        = (pageNumber - 1) * limitNumber;
+    const searchText      = String(search).trim();
+    const statusText      = String(status).trim();
+    const sortByText      = String(sort_by).trim();
+    const rulMinNum       = rul_min !== '' ? parseFloat(String(rul_min)) : null;
+    const rulMaxNum       = rul_max !== '' ? parseFloat(String(rul_max)) : null;
+    const categoryText    = String(category).trim();
+    const criticalityText = String(criticality).trim();
+    const gedungIdText    = String(gedung_id).trim();
 
     const companyWhere = {
       OR: [
@@ -55,34 +66,51 @@ app.get('/api/assets', authenticateJWT, async (req: Request, res: Response) => {
       ],
     };
 
-    const assetWhere: any = { company: companyWhere };
+    // Build Prisma WHERE using AND so multiple conditions compose correctly
+    const andClauses: any[] = [];
 
     if (searchText) {
-      assetWhere.OR = [
-        { asset_name: { contains: searchText, mode: 'insensitive' } },
-        { brand: { contains: searchText, mode: 'insensitive' } },
-        { category: { contains: searchText, mode: 'insensitive' } },
-        { type: { contains: searchText, mode: 'insensitive' } },
-      ];
+      andClauses.push({
+        OR: [
+          { asset_name: { contains: searchText, mode: 'insensitive' } },
+          { merk:     { nama: { contains: searchText, mode: 'insensitive' } } },
+          { kategori: { nama: { contains: searchText, mode: 'insensitive' } } },
+          { tipe:     { nama: { contains: searchText, mode: 'insensitive' } } },
+        ],
+      });
     }
-
     if (statusText && statusText !== 'All Status') {
-      assetWhere.status = statusText;
+      andClauses.push({ status: statusText });
+    }
+    if (categoryText) {
+      andClauses.push({ kategori: { nama: { equals: categoryText, mode: 'insensitive' } } });
+    }
+    if (criticalityText) {
+      andClauses.push({ criticality_level: criticalityText });
+    }
+    if (gedungIdText) {
+      andClauses.push({ gedung_id: gedungIdText });
     }
 
-    const [total, assets, statusCounts] = await Promise.all([
-      prisma.asset.count({ where: assetWhere }),
+    const assetWhere: any = {
+      company: companyWhere,
+      ...(andClauses.length > 0 ? { AND: andClauses } : {}),
+    };
+
+    // Fetch all matching assets (no pagination yet — RUL sort/filter happens in JS)
+    const [allAssets, statusCounts] = await Promise.all([
       prisma.asset.findMany({
         where: assetWhere,
-        orderBy: { asset_name: 'asc' },
-        skip,
-        take: limitNumber,
         include: {
-          gedung: { select: { nama: true, kode: true } },
+          gedung:      { select: { nama: true, kode: true } },
+          merk:        { select: { nama: true } },
+          kategori:    { select: { nama: true } },
+          subKategori: { select: { nama: true } },
+          tipe:        { select: { nama: true } },
           prediction_history: {
             orderBy: { recorded_at: 'desc' },
             take: 1,
-            select: { predicted_rul: true, recorded_at: true },
+            select: { predicted_rul: true },
           },
           maintenances: {
             orderBy: { scheduled_date: 'desc' },
@@ -98,18 +126,14 @@ app.get('/api/assets', authenticateJWT, async (req: Request, res: Response) => {
       }),
     ]);
 
-    const byStatus = (statusCounts as any[]).reduce((acc: Record<string, number>, item: any) => {
-      acc[item.status] = item._count.id;
-      return acc;
-    }, {});
-
-    const mappedAssets = (assets as any[]).map((a) => ({
+    // Map to response shape
+    let mapped: any[] = (allAssets as any[]).map((a) => ({
       id: a.id,
       asset_name: a.asset_name,
-      brand: a.brand,
-      category: a.category,
-      sub_category: a.sub_category,
-      type: a.type,
+      brand: a.merk?.nama ?? '',
+      category: a.kategori?.nama ?? '',
+      sub_category: a.subKategori?.nama ?? '',
+      type: a.tipe?.nama ?? '',
       status: a.status,
       criticality_level: a.criticality_level,
       purchase_date: a.purchase_date,
@@ -118,14 +142,62 @@ app.get('/api/assets', authenticateJWT, async (req: Request, res: Response) => {
       last_action: a.maintenances[0]?.scheduled_date ?? a.purchase_date,
     }));
 
+    // Apply RUL range filter in JS (predicted_rul lives in a related table)
+    if (rulMinNum !== null) {
+      mapped = mapped.filter((a) => a.predicted_rul !== null && a.predicted_rul >= rulMinNum);
+    }
+    if (rulMaxNum !== null) {
+      mapped = mapped.filter((a) => a.predicted_rul !== null && a.predicted_rul <= rulMaxNum);
+    }
+
+    // Sort in JS
+    switch (sortByText) {
+      case 'name_desc':
+        mapped.sort((a, b) => b.asset_name.localeCompare(a.asset_name));
+        break;
+      case 'rul_asc':
+        mapped.sort((a, b) => {
+          if (a.predicted_rul === null) return 1;
+          if (b.predicted_rul === null) return -1;
+          return a.predicted_rul - b.predicted_rul;
+        });
+        break;
+      case 'rul_desc':
+        mapped.sort((a, b) => {
+          if (a.predicted_rul === null) return 1;
+          if (b.predicted_rul === null) return -1;
+          return b.predicted_rul - a.predicted_rul;
+        });
+        break;
+      case 'date_desc':
+        mapped.sort((a, b) => new Date(b.last_action).getTime() - new Date(a.last_action).getTime());
+        break;
+      case 'date_asc':
+        mapped.sort((a, b) => new Date(a.last_action).getTime() - new Date(b.last_action).getTime());
+        break;
+      default: // name_asc
+        mapped.sort((a, b) => a.asset_name.localeCompare(b.asset_name));
+    }
+
+    const filteredTotal = mapped.length;
+    const paginated     = mapped.slice(skip, skip + limitNumber);
+
+    const byStatus = (statusCounts as any[]).reduce((acc: Record<string, number>, item: any) => {
+      acc[item.status] = item._count.id;
+      return acc;
+    }, {});
+
     return res.status(200).json({
-      data: mappedAssets,
-      stats: { total, by_status: byStatus },
+      data: paginated,
+      stats: {
+        total: (statusCounts as any[]).reduce((s: number, r: any) => s + r._count.id, 0),
+        by_status: byStatus,
+      },
       pagination: {
         page: pageNumber,
         limit: limitNumber,
-        total,
-        totalPages: Math.ceil(total / limitNumber),
+        total: filteredTotal,
+        totalPages: Math.ceil(filteredTotal / limitNumber) || 1,
       },
     });
   } catch (error) {
@@ -149,18 +221,25 @@ app.get('/api/assets/:id', authenticateJWT, async (req: Request, res: Response) 
           ],
         },
       },
-      orderBy: { asset_name: 'asc' },
-      select: {
-        id: true,
-        asset_name: true,
-        status: true,
-        criticality_level: true,
-        gedung_id: true,
-        gedung:      { select: { id: true, nama: true } },
-        merk:        { select: { id: true, kode: true, nama: true } },
-        kategori:    { select: { id: true, kode: true, nama: true } },
-        subKategori: { select: { id: true, kode: true, nama: true } },
-        tipe:        { select: { id: true, kode: true, nama: true } },
+      include: {
+        gedung:      true,
+        merk:        true,
+        kategori:    true,
+        subKategori: true,
+        tipe:        true,
+        maintenances: {
+          orderBy: { scheduled_date: 'desc' },
+          include: {
+            user: { select: { id: true, name: true } },
+            logs: {
+              orderBy: { created_at: 'asc' },
+              include: { user: { select: { id: true, name: true } } },
+            },
+          },
+        },
+        prediction_history: {
+          orderBy: { recorded_at: 'desc' },
+        },
       },
     });
 
@@ -168,11 +247,26 @@ app.get('/api/assets/:id', authenticateJWT, async (req: Request, res: Response) 
       return res.status(404).json({ error: 'Asset not found or inaccessible' });
     }
 
+    const latestPrediction = (asset as any).prediction_history[0] ?? null;
+
     return res.status(200).json({
       data: {
-        ...(asset as any),
-        predicted_rul: (asset as any).prediction_history[0]?.predicted_rul ?? null,
-        maintenance_count: (asset as any).maintenances.length,
+        id:                  asset.id,
+        asset_name:          asset.asset_name,
+        status:              asset.status,
+        criticality_level:   asset.criticality_level,
+        purchase_date:       asset.purchase_date,
+        initial_useful_life: asset.initial_useful_life,
+        asset_image:         (asset as any).asset_image ?? null,
+        gedung:              asset.gedung,
+        brand:               (asset as any).merk?.nama        ?? '-',
+        category:            (asset as any).kategori?.nama    ?? '-',
+        sub_category:        (asset as any).subKategori?.nama ?? '-',
+        type:                (asset as any).tipe?.nama        ?? '-',
+        predicted_rul:       latestPrediction?.predicted_rul ?? null,
+        maintenance_count:   (asset as any).maintenances.length,
+        maintenances:        (asset as any).maintenances,
+        prediction_history:  (asset as any).prediction_history,
       },
     });
   } catch (error) {
@@ -518,8 +612,11 @@ app.get('/api/maintenances', authenticateJWT, async (req: Request, res: Response
           assignedTechnician: {
             select: { id: true, name: true, email: true },
           },
+          technician: {
+            select: { id: true, name: true, email: true, specialization: true, phone: true },
+          },
           logs: {
-            orderBy: { created_at: 'desc' },
+            orderBy: { created_at: 'asc' },
             include: {
               user: {
                 select: { id: true, name: true, email: true },
@@ -539,8 +636,8 @@ app.get('/api/maintenances', authenticateJWT, async (req: Request, res: Response
 
     const maintenancesWithLatestStatus = maintenances.map((maintenance: any) => ({
       ...maintenance,
-      latestStatus: maintenance.logs[0]?.status || maintenance.status,
-      currentStatusFromLog: maintenance.logs[0]?.status || maintenance.status,
+      latestStatus: maintenance.logs[maintenance.logs.length - 1]?.status || maintenance.status,
+      currentStatusFromLog: maintenance.logs[maintenance.logs.length - 1]?.status || maintenance.status,
     }));
 
     return res.status(200).json({
@@ -570,6 +667,7 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
       cost,
       status,
       assigned_technician_id,
+      id_teknisi,
       note,
       id_user
     } = req.body;
@@ -612,6 +710,7 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
         id_asset,
         id_user: userId,
         assigned_technician_id: assigned_technician_id || null,
+        id_teknisi: id_teknisi || null,
         maintenance_type: maintenance_type || 'Preventive',
         severity: severity || 'Medium',
         scheduled_date: new Date(scheduled_date),
@@ -693,7 +792,7 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
 
       if (aiResponse.ok) {
         const aiData = await aiResponse.json();
-        if (aiData && aiData.predicted_rul !== undefined) {
+        if (aiData && typeof aiData.predicted_rul === 'number' && aiData.predicted_rul > 0) {
           predicted_rul = Math.round(aiData.predicted_rul);
         }
       } else {
@@ -723,15 +822,14 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
         assignedTechnician: {
           select: { id: true, name: true, email: true }
         },
+        technician: {
+          select: { id: true, name: true, email: true, specialization: true, phone: true }
+        },
         logs: {
-          orderBy: { created_at: 'desc' },
+          orderBy: { created_at: 'asc' },
           include: {
-            user: {
-              select: { id: true, name: true, email: true }
-            },
-            technician: {
-              select: { id: true, name: true, email: true }
-            }
+            user: { select: { id: true, name: true, email: true } },
+            technician: { select: { id: true, name: true, email: true } }
           }
         }
       }
@@ -757,6 +855,7 @@ app.patch('/api/maintenances/:id', authenticateJWT, async (req: Request, res: Re
     const {
       id_asset,
       assigned_technician_id,
+      id_teknisi,
       maintenance_type,
       severity,
       scheduled_date,
@@ -816,6 +915,7 @@ app.patch('/api/maintenances/:id', authenticateJWT, async (req: Request, res: Re
 
     if (hasField('id_asset') && id_asset) updateData.id_asset = id_asset;
     if (hasField('assigned_technician_id')) updateData.assigned_technician_id = assigned_technician_id || null;
+    if (hasField('id_teknisi')) updateData.id_teknisi = id_teknisi || null;
     if (hasField('maintenance_type')) updateData.maintenance_type = maintenance_type;
     if (hasField('severity')) updateData.severity = severity;
     if (hasField('scheduled_date')) {
@@ -863,26 +963,17 @@ app.patch('/api/maintenances/:id', authenticateJWT, async (req: Request, res: Re
         where: { id: maintenance.id },
         include: {
           asset: true,
-          user: {
-            select: { id: true, name: true, email: true },
-          },
-          assignedTechnician: {
-            select: { id: true, name: true, email: true },
-          },
+          user: { select: { id: true, name: true, email: true } },
+          assignedTechnician: { select: { id: true, name: true, email: true } },
+          technician: { select: { id: true, name: true, email: true, specialization: true, phone: true } },
           logs: {
-            orderBy: { created_at: 'desc' },
+            orderBy: { created_at: 'asc' },
             include: {
-              user: {
-                select: { id: true, name: true, email: true },
-              },
-              technician: {
-                select: { id: true, name: true, email: true },
-              },
+              user: { select: { id: true, name: true, email: true } },
+              technician: { select: { id: true, name: true, email: true } },
             },
           },
-          prediction_history: {
-            orderBy: { recorded_at: 'desc' },
-          },
+          prediction_history: { orderBy: { recorded_at: 'desc' } },
         },
       });
     });
@@ -1347,7 +1438,7 @@ app.patch('/api/technicians/:id/status', authenticateJWT, async (req: Request, r
   }
 });
 
-// GET /api/alerts — aset dengan predicted_rul <= 24 bulan (latest prediction per asset)
+// GET /api/alerts — aset dengan predicted_rul <= 730 hari (latest prediction per asset)
 app.get('/api/alerts', authenticateJWT, async (req: Request, res: Response) => {
   try {
     const userCompany = await findUserCompany((req as any).user.id);
@@ -1374,7 +1465,7 @@ app.get('/api/alerts', authenticateJWT, async (req: Request, res: Response) => {
       LEFT JOIN tipe         t  ON t.id  = a.tipe_id
       JOIN asset_prediction_history aph ON aph.id_asset = a.id
       WHERE a.id_perusahaan = ${companyId}
-        AND aph.predicted_rul <= 24
+        AND aph.predicted_rul <= 730
       ORDER BY a.id, aph.recorded_at DESC
     `;
 
@@ -1423,12 +1514,13 @@ app.get('/api/dashboard', authenticateJWT, async (req: Request, res: Response) =
       ORDER BY month_ts
     `;
 
-    // Alerts summary (latest predicted_rul per asset)
+    // Alerts summary (latest predicted_rul per asset) — satuan HARI
+    // Critical ≤180 hari, High ≤365 hari, Watch ≤730 hari
     const alertsSummary: any[] = await prisma.$queryRaw`
       SELECT
-        SUM(CASE WHEN aph.predicted_rul <= 6  THEN 1 ELSE 0 END)::int  AS critical,
-        SUM(CASE WHEN aph.predicted_rul > 6  AND aph.predicted_rul <= 12 THEN 1 ELSE 0 END)::int AS high,
-        SUM(CASE WHEN aph.predicted_rul > 12 AND aph.predicted_rul <= 24 THEN 1 ELSE 0 END)::int AS watch
+        SUM(CASE WHEN aph.predicted_rul <= 180  THEN 1 ELSE 0 END)::int  AS critical,
+        SUM(CASE WHEN aph.predicted_rul > 180 AND aph.predicted_rul <= 365 THEN 1 ELSE 0 END)::int AS high,
+        SUM(CASE WHEN aph.predicted_rul > 365 AND aph.predicted_rul <= 730 THEN 1 ELSE 0 END)::int AS watch
       FROM (
         SELECT DISTINCT ON (a.id) a.id, aph.predicted_rul
         FROM assets a

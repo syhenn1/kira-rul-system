@@ -29,9 +29,9 @@ interface Props {
 type Zone = { label: string; color: string; bar: string; glow: string; icon: string };
 
 function getZone(rul: number): Zone {
-  if (rul <= 90)  return { label: 'Kritis',  color: 'text-red-500',     bar: 'bg-red-500',     glow: 'shadow-red-200',    icon: '🔴' };
-  if (rul <= 180) return { label: 'Tinggi',  color: 'text-orange-500',  bar: 'bg-orange-500',  glow: 'shadow-orange-200', icon: '🟠' };
-  if (rul <= 365) return { label: 'Sedang',  color: 'text-yellow-600',  bar: 'bg-yellow-500',  glow: 'shadow-yellow-200', icon: '🟡' };
+  if (rul <= 180) return { label: 'Kritis',  color: 'text-red-500',     bar: 'bg-red-500',     glow: 'shadow-red-200',    icon: '🔴' };
+  if (rul <= 365) return { label: 'Tinggi',  color: 'text-orange-500',  bar: 'bg-orange-500',  glow: 'shadow-orange-200', icon: '🟠' };
+  if (rul <= 730) return { label: 'Sedang',  color: 'text-yellow-600',  bar: 'bg-yellow-500',  glow: 'shadow-yellow-200', icon: '🟡' };
   return           { label: 'Baik',    color: 'text-emerald-600', bar: 'bg-emerald-500', glow: 'shadow-emerald-200', icon: '🟢' };
 }
 

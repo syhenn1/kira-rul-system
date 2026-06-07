@@ -6,7 +6,6 @@ import { apiFetch } from '@/lib/api';
 import { authApi } from '@/lib/auth';
 import LookupDropdown from './LookupDropdown';
 import type { AssetAddedResult } from './AssetAddedModal';
-import { KATEGORI_TO_SUBKAT, SUBKAT_TO_TIPE } from '@/lib/lookup-hierarchy';
 
 type Gedung = { id: string; nama: string; kode: string };
 type PinMode = 'verify' | 'set' | 'set-confirm';
@@ -23,10 +22,163 @@ const GEDUNG_COLORS: Record<string, string> = {
   UTAMA:  'bg-cyan-100 text-cyan-700 border-cyan-200',
 };
 
+// ── STRICT BRAND TO HIERARCHY MATRIX FROM DATASET ────────────────────────────
+// Kombinasi Merek → Kategori → Sub Kategori → Tipe diekstrak 100% dari dataset.
+const BRAND_VALIDATION_MATRIX: Record<string, Record<string, Record<string, string[]>>> = {
+  'Sharp': {
+    'Mechanical': { 'Tata Udara': ['AC Split'] },
+  },
+  'Perkins': {
+    'Mechanical': { 'Genset': ['Genset Diesel'] },
+  },
+  'Hochiki': {
+    'Sistem Proteksi Kebakaran Aktif': { 'Sistem Deteksi Kebakaran': ['Smoke Detector', 'Heat Detector'] },
+  },
+  'Hikvision': {
+    'Security Sistem': { 'Sistem Pengawasan': ['Kamera CCTV', 'Monitor CCTV', 'DVR CCTV'] },
+  },
+  'Daikin': {
+    'Mechanical': { 'Tata Udara': ['AC Cassette', 'AC Split', 'AC Sentral'] },
+  },
+  'Import': {
+    'Mechanical': { 'Tata Udara': ['AHU', 'FCU'] },
+    'Electrical': {
+      'Control Panel': ['Control Panel Hydrant Diesel Pump', 'Control Panel AC', 'Panel PP-ME', 'Control Panel Penerangan'],
+      'Lampu Penerangan': ['Lampu LED', 'Lampu Downlight', 'Lampu TL LED'],
+      'Panel Distribusi': ['Panel UPS', 'SDP'],
+    },
+    'Plumbing': { 'Sanitari Sistem': ['Urinal', 'Floor Drain', 'Kloset'] },
+    'Sistem Pemadam Kebakaran': {
+      'Alat Pemadam Api Portable': ['APAR Wet Chemical', 'APAB Dry Powder', 'APAR Dry Powder Stored Pressure', 'APAR Dry Powder Cartridge'],
+      'Fire Pump System': ['Diesel Fire Pump'],
+    },
+    'Sistem Telekomunikasi Gedung': {
+      'Telephone System': ['PABX', 'Pesawat Telepon'],
+      'Sistem Audio dan Video': ['Monitor/Layar'],
+    },
+    'Arsitektur': { 'Interior Gedung': ['Plafon Gypsum / GRC'] },
+    'Civil': {
+      'Lantai Bangunan': ['Lantai Granit'],
+      'Dinding Bangunan': ['Dinding Tembok/Mansonry'],
+    },
+  },
+  'Generic': {
+    'Mechanical': { 'Tata Udara': ['AC VRV', 'FCU'] },
+    'Electrical': {
+      'Signage Gedung': ['Lampu Neon Sign', 'Lampu Pylon Sign'],
+      'Panel Distribusi': ['Panel UPS', 'LVMDP', 'SDP'],
+      'Lampu Penerangan': ['Lampu LED Downlight', 'Lampu Downlight'],
+      'Generator Panel': ['Automatic Transfer Switch (ATS Panel)'],
+    },
+    'Plumbing': {
+      'Sanitari Sistem': ['Kloset', 'Jet Shower'],
+      'Sistem Pemipaan gedung': ['Pemipaan Air Bersih', 'Pemipaan Air Kotor'],
+    },
+    'Sistem Pemadam Kebakaran': {
+      'Alat Pemadam Api Portable': ['APAR CO2', 'APAB Dry Powder', 'APAR Dry Powder Stored Pressure', 'APAR Dry Powder Cartridge'],
+      'Hydrant System': ['Valve Control'],
+    },
+    'Security Sistem': { 'Sistem Keamanan': ['Access Control', 'Push Button'] },
+    'Sistem Telekomunikasi Gedung': {
+      'Telephone System': ['Pesawat Telepon', 'PABX'],
+      'Sistem Audio dan Video': ['Monitor/Layar'],
+    },
+    'Sistem Proteksi Kebakaran Aktif': { 'Sistem Alarm Kebakaran': ['Bell Alarm', 'MCFA'] },
+    'Civil': {
+      'Lantai Bangunan': ['Lantai Karpet', 'Lantai Granit', 'Lantai Keramik'],
+      'Atap Bangunan': ['Atap Beton'],
+    },
+    'Distribusi Air': { 'Distributor Air Bersih': ['Roof Tank'] },
+    'Arsitektur': { 'Interior Gedung': ['Plafon Gypsum / GRC'] },
+  },
+  'Lokal': {
+    'Mechanical': { 'Tata Udara': ['AC VRV'] },
+    'Electrical': {
+      'Signage Gedung': ['Lampu Backlit Sign', 'Lampu Pylon Sign'],
+      'Generator Panel': ['Automatic Transfer Switch (ATS Panel)'],
+      'Panel Distribusi': ['SDP'],
+      'Control Panel': ['Control Panel Penerangan'],
+      'Lampu Penerangan': ['Lampu LED'],
+    },
+    'Security Sistem': { 'Sistem Keamanan': ['Kick Bar'] },
+    'Sistem Pemadam Kebakaran': {
+      'Fire Pump System': ['Diesel Fire Pump'],
+      'Hydrant System': ['Valve Control'],
+      'Alat Pemadam Api Portable': ['APAR CO2', 'APAR Dry Powder Cartridge', 'APAB Dry Powder', 'APAR Dry Powder Stored Pressure'],
+    },
+    'Sistem Proteksi Kebakaran Aktif': { 'Sistem Alarm Kebakaran': ['Bell Alarm'] },
+    'Sistem Telekomunikasi Gedung': {
+      'Telephone System': ['PABX'],
+      'Sistem Jaringan Internet': ['LAN (Local Area Network)'],
+    },
+    'Plumbing': {
+      'Sanitari Sistem': ['Rooftank', 'Kloset', 'Urinal', 'Jet Shower'],
+      'Sistem Pemipaan gedung': ['Pemipaan Air Kotor'],
+    },
+    'Civil': {
+      'Atap Bangunan': ['Atap Beton'],
+      'Dinding Bangunan': ['Dinding Batu Alam', 'Dinding Tembok/Mansonry'],
+    },
+    'Arsitektur': {
+      'Interior Gedung': ['Plafon Gypsum / GRC'],
+      'Pintu dan Jendela': ['Pintu Kayu/HPL'],
+    },
+  },
+  'Mitsubishi': {
+    'Mechanical': { 'Tata Udara': ['AC Cassette', 'AC Split'] },
+  },
+  'Panasonic': {
+    'Mechanical': { 'Tata Udara': ['AC Split', 'AC Cassette'] },
+    'Ventilasi Sistem': { 'Sistem Sirkulasi Udara': ['Exhaust Fan'] },
+  },
+  'Gree': {
+    'Mechanical': { 'Tata Udara': ['AC Split'] },
+  },
+  'Grundfos': {
+    'Mechanical': { 'Pompa': ['Pompa Transfer', 'Pompa Air Tanah', 'Pompa Boster'] },
+  },
+  'LG': {
+    'Mechanical': { 'Tata Udara': ['AC Cassette', 'AC Split'] },
+    'Security Sistem': { 'Sistem Pengawasan': ['Monitor CCTV'] },
+  },
+  'Bosch': {
+    'Security Sistem': { 'Sistem Pengawasan': ['Kamera CCTV'] },
+  },
+  'Samsung': {
+    'Mechanical': { 'Tata Udara': ['AC Split'] },
+  },
+  'Notifier': {
+    'Sistem Proteksi Kebakaran Aktif': { 'Sistem Deteksi Kebakaran': ['Smoke Detector'] },
+  },
+  'Wasser': {
+    'Plumbing': { 'Sanitari Sistem': ['Kran Air'] },
+  },
+  'Honeywell': {
+    'Security Sistem': { 'Sistem Pengawasan': ['DVR CCTV'] },
+  },
+  'Axis': {
+    'Security Sistem': { 'Sistem Pengawasan': ['Kamera CCTV'] },
+  },
+  'Ebara': {
+    'Mechanical': { 'Pompa': ['Pompa Boster'] },
+  },
+  'Krisbow': {
+    'Ventilasi Sistem': { 'Sistem Sirkulasi Udara': ['Exhaust Fan'] },
+  },
+  'KDK': {
+    'Ventilasi Sistem': { 'Sistem Sirkulasi Udara': ['Exhaust Fan'] },
+  },
+  'Dahua': {
+    'Security Sistem': { 'Sistem Pengawasan': ['Kamera CCTV'] },
+  },
+  'Cummins': {
+    'Mechanical': { 'Genset': ['Genset Diesel'] },
+  },
+};
+
 interface Props {
   open: boolean;
   onClose: () => void;
-  /** Called with asset result data so the parent can show AssetAddedModal */
   onSuccess: (data: AssetAddedResult, image: string | null) => void;
 }
 
@@ -38,11 +190,13 @@ export default function AddAssetModal({ open, onClose, onSuccess }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // All lookup items (fetched once, then filtered by cascade)
+  // Pre-fetched lookup data (fetched once on open)
+  const [allMerk,        setAllMerk]        = useState<LookupItem[]>([]);
+  const [allKategori,    setAllKategori]    = useState<LookupItem[]>([]);
   const [allSubKategori, setAllSubKategori] = useState<LookupItem[]>([]);
-  const [allTipe, setAllTipe]               = useState<LookupItem[]>([]);
+  const [allTipe,        setAllTipe]        = useState<LookupItem[]>([]);
 
-  // Lookup selections
+  // States klasifikasi yang dipilih
   const [merk, setMerk] = useState<LookupItem | null>(null);
   const [kategori, setKategori] = useState<LookupItem | null>(null);
   const [subKategori, setSubKategori] = useState<LookupItem | null>(null);
@@ -82,43 +236,56 @@ export default function AddAssetModal({ open, onClose, onSuccess }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    reset();
     const token = authApi.getToken();
+    const h = { Authorization: `Bearer ${token}` };
     Promise.all([
-      apiFetch('/api/gedung',            { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
-      apiFetch('/api/auth/me',           { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
-      apiFetch('/api/lookup/sub_kategori', { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
-      apiFetch('/api/lookup/tipe',       { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()),
+      apiFetch('/api/gedung',              { headers: h }).then((r) => r.json()),
+      apiFetch('/api/auth/me',             { headers: h }).then((r) => r.json()),
+      apiFetch('/api/lookup/merk',         { headers: h }).then((r) => r.json()),
+      apiFetch('/api/lookup/kategori',     { headers: h }).then((r) => r.json()),
+      apiFetch('/api/lookup/sub_kategori', { headers: h }).then((r) => r.json()),
+      apiFetch('/api/lookup/tipe',         { headers: h }).then((r) => r.json()),
     ])
-      .then(([gedungData, meData, subKatData, tipeData]) => {
+      .then(([gedungData, meData, merkData, katData, subKatData, tipeData]) => {
+        reset();
         setGedungList(gedungData.gedung || []);
         setHasPin(!!meData.has_pin);
+        setAllMerk(merkData.data        || []);
+        setAllKategori(katData.data     || []);
         setAllSubKategori(subKatData.data || []);
-        setAllTipe(tipeData.data || []);
+        setAllTipe(tipeData.data        || []);
       })
       .catch(console.error);
   }, [open, reset]);
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && !showPin) onClose(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose, showPin]);
+  // LookupItem[] yang difilter berdasarkan BRAND_VALIDATION_MATRIX
+  const filteredMerk = useMemo(
+    () => allMerk.filter((m) => m.nama in BRAND_VALIDATION_MATRIX),
+    [allMerk],
+  );
 
-  /* ── Cascade filtering ───────────────────────────────────────────────────── */
-  const filteredSubKategori = useMemo<LookupItem[]>(() => {
-    if (!kategori) return allSubKategori;
-    const allowed = KATEGORI_TO_SUBKAT[kategori.kode];
-    return allowed ? allSubKategori.filter((sk) => allowed.includes(sk.kode)) : allSubKategori;
-  }, [kategori, allSubKategori]);
+  const filteredKategori = useMemo(() => {
+    if (!merk) return [];
+    const allowed = Object.keys(BRAND_VALIDATION_MATRIX[merk.nama] || {});
+    return allKategori.filter((k) => allowed.includes(k.nama));
+  }, [merk, allKategori]);
 
-  const filteredTipe = useMemo<LookupItem[]>(() => {
-    if (!subKategori) return allTipe;
-    const allowed = SUBKAT_TO_TIPE[subKategori.kode];
-    return allowed && allowed.length > 0 ? allTipe.filter((t) => allowed.includes(t.kode)) : allTipe;
-  }, [subKategori, allTipe]);
+  const filteredSubKategori = useMemo(() => {
+    if (!merk || !kategori) return [];
+    const allowed = Object.keys(BRAND_VALIDATION_MATRIX[merk.nama]?.[kategori.nama] || {});
+    return allSubKategori.filter((sk) => allowed.includes(sk.nama));
+  }, [merk, kategori, allSubKategori]);
 
-  /* Cascade-reset: picking a new kategori clears dependent fields */
+  const filteredTipe = useMemo(() => {
+    if (!merk || !kategori || !subKategori) return [];
+    const allowed = BRAND_VALIDATION_MATRIX[merk.nama]?.[kategori.nama]?.[subKategori.nama] || [];
+    return allTipe.filter((t) => allowed.includes(t.nama));
+  }, [merk, kategori, subKategori, allTipe]);
+
+  // Cascade clear: Memastikan hierarki dibersihkan ke bawah setiap kali level atas berubah
+  const handleMerkChange = (item: LookupItem | null) => {
+    setMerk(item); setKategori(null); setSubKategori(null); setTipe(null);
+  };
   const handleKategoriChange = (item: LookupItem | null) => {
     setKategori(item); setSubKategori(null); setTipe(null);
   };
@@ -133,52 +300,15 @@ export default function AddAssetModal({ open, onClose, onSuccess }: Props) {
     if (!assetName.trim()) { setErrorMsg('Nama aset wajib diisi.'); return; }
     if (!purchaseDate)     { setErrorMsg('Tanggal pembelian wajib diisi.'); return; }
     if (!criticalityLevel) { setErrorMsg('Tingkat kekritisan wajib dipilih.'); return; }
+    if (!merk || !kategori || !subKategori || !tipe) { 
+      setErrorMsg('Semua klasifikasi aset (Merk, Kategori, Sub, Tipe) wajib dipilih.'); return; 
+    }
+
     setPinValue('');
     setPinConfirm('');
     setPinError('');
     setPinMode(hasPin ? 'verify' : 'set');
     setShowPin(true);
-  };
-
-  const handlePinSubmit = async () => {
-    setPinError('');
-    if (!/^\d{6}$/.test(pinValue)) { setPinError('PIN harus 6 digit angka'); return; }
-
-    if (pinMode === 'set') { setPinMode('set-confirm'); setPinConfirm(''); return; }
-
-    if (pinMode === 'set-confirm') {
-      if (pinConfirm !== pinValue) { setPinError('Konfirmasi PIN tidak cocok'); return; }
-      setPinLoading(true);
-      try {
-        const token = authApi.getToken();
-        const r = await apiFetch('/api/auth/set-pin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ pin: pinValue }),
-        });
-        if (!r.ok) throw new Error((await r.json()).error || 'Gagal menyimpan PIN');
-        setHasPin(true);
-        setShowPin(false);
-        await submitAsset();
-      } catch (e) { setPinError((e as Error).message); }
-      finally { setPinLoading(false); }
-      return;
-    }
-
-    // verify mode
-    setPinLoading(true);
-    try {
-      const token = authApi.getToken();
-      const r = await apiFetch('/api/auth/verify-pin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ pin: pinValue }),
-      });
-      if (!r.ok) throw new Error((await r.json()).error || 'PIN salah');
-      setShowPin(false);
-      await submitAsset();
-    } catch (e) { setPinError((e as Error).message); }
-    finally { setPinLoading(false); }
   };
 
   const submitAsset = async () => {
@@ -217,7 +347,6 @@ export default function AddAssetModal({ open, onClose, onSuccess }: Props) {
         tipe:          tipe?.nama,
       };
 
-      // Close modal first, then notify parent so AssetAddedModal can appear
       onClose();
       onSuccess(resultData, preview);
     } catch (error) {
@@ -227,13 +356,53 @@ export default function AddAssetModal({ open, onClose, onSuccess }: Props) {
     }
   };
 
+  const handlePinSubmit = async () => {
+    setPinError('');
+    if (!/^\d{6}$/.test(pinValue)) { setPinError('PIN harus 6 digit angka'); return; }
+
+    if (pinMode === 'set') { setPinMode('set-confirm'); setPinConfirm(''); return; }
+
+    if (pinMode === 'set-confirm') {
+      if (pinConfirm !== pinValue) { setPinError('Konfirmasi PIN tidak cocok'); return; }
+      setPinLoading(true);
+      try {
+        const token = authApi.getToken();
+        const r = await apiFetch('/api/auth/set-pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ pin: pinValue }),
+        });
+        if (!r.ok) throw new Error((await r.json()).error || 'Gagal menyimpan PIN');
+        setHasPin(true);
+        setShowPin(false);
+        await submitAsset();
+      } catch (e) { setPinError((e as Error).message); }
+      finally { setPinLoading(false); }
+      return;
+    }
+
+    setPinLoading(true);
+    try {
+      const token = authApi.getToken();
+      const r = await apiFetch('/api/auth/verify-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ pin: pinValue }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'PIN salah');
+      setShowPin(false);
+      await submitAsset();
+    } catch (e) { setPinError((e as Error).message); }
+    finally { setPinLoading(false); }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-6"
       onClick={(e) => { if (e.target === e.currentTarget && !showPin) onClose(); }}
     >
       <div className={`bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden animate-fadeIn transition-all duration-200 ${showPin ? 'scale-[0.97] opacity-60 pointer-events-none' : ''}`}>
-
+        
         {/* Header */}
         <div className="flex items-center justify-between px-10 pt-8 pb-5 border-b shrink-0">
           <div>
@@ -327,22 +496,10 @@ export default function AddAssetModal({ open, onClose, onSuccess }: Props) {
                       className="w-full mt-1.5 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-black text-sm" />
                   </div>
 
-                  <LookupDropdown label="Merk / Brand" table="merk"     value={merk}     onChange={setMerk}                placeholder="Pilih merk aset" />
-                  <LookupDropdown label="Kategori"     table="kategori" value={kategori} onChange={handleKategoriChange}    placeholder="Pilih kategori" />
-                  <LookupDropdown
-                    label="Sub Kategori" table="sub_kategori"
-                    value={subKategori}  onChange={handleSubKategoriChange}
-                    placeholder="Pilih sub kategori"
-                    overrideItems={filteredSubKategori}
-                    disabled={!kategori} disabledHint="Pilih Kategori terlebih dahulu"
-                  />
-                  <LookupDropdown
-                    label="Tipe" table="tipe"
-                    value={tipe} onChange={setTipe}
-                    placeholder="Pilih tipe aset"
-                    overrideItems={filteredTipe}
-                    disabled={!subKategori} disabledHint="Pilih Sub Kategori terlebih dahulu"
-                  />
+                  <LookupDropdown label="Merk / Brand"  table="merk"         value={merk}        onChange={handleMerkChange}        overrideItems={filteredMerk}        placeholder="Pilih merk aset" />
+                  <LookupDropdown label="Kategori"      table="kategori"     value={kategori}    onChange={handleKategoriChange}    overrideItems={filteredKategori}    placeholder="Pilih kategori"    disabled={!merk}        disabledHint="Pilih Merk terlebih dahulu" />
+                  <LookupDropdown label="Sub Kategori"  table="sub_kategori" value={subKategori}  onChange={handleSubKategoriChange}  overrideItems={filteredSubKategori}  placeholder="Pilih sub kategori" disabled={!kategori}    disabledHint="Pilih Kategori terlebih dahulu" />
+                  <LookupDropdown label="Tipe"          table="tipe"         value={tipe}        onChange={setTipe}                  overrideItems={filteredTipe}        placeholder="Pilih tipe aset"   disabled={!subKategori} disabledHint="Pilih Sub Kategori terlebih dahulu" />
 
                   <FormSelect label="Tingkat Kekritisan" value={criticalityLevel} onChange={(e) => setCriticalityLevel(e.target.value)} options={['Critical', 'Major', 'Minor']} />
                 </div>
@@ -475,7 +632,6 @@ function PinBoxes({ value, onChange, onEnter }: { value: string; onChange: (v: s
   useEffect(() => {
     const firstEmpty = digits.findIndex((d) => !d);
     refs.current[firstEmpty === -1 ? 0 : firstEmpty]?.focus();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -527,7 +683,7 @@ function FormSelect({ label, options, value, onChange }: {
     <div>
       <label className="text-sm font-medium text-gray-700">{label}</label>
       <select value={value} onChange={onChange}
-        className="w-full mt-1.5 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-black text-sm">
+        className="w-full mt-1.5 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-black text-sm cursor-pointer">
         <option value="">Pilih {label}</option>
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
