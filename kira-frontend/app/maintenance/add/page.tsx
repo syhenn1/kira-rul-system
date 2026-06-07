@@ -245,6 +245,127 @@ function RULResultModal({ result, onGoToList, onClose }: {
   );
 }
 
+// ── Severity Conflict Modal ───────────────────────────────────────────────────
+
+const SEVERITY_COLOR: Record<string, string> = {
+  Critical: 'text-red-600 bg-red-50 border-red-200',
+  High:     'text-orange-500 bg-orange-50 border-orange-200',
+  Medium:   'text-yellow-600 bg-yellow-50 border-yellow-200',
+  Low:      'text-green-600 bg-green-50 border-green-200',
+};
+
+function SeverityConflictModal({
+  userSeverity, aiSeverity, confidence, probabilities,
+  finalSeverity, onChangeFinal, onConfirm, onCancel, isSubmitting,
+}: {
+  userSeverity: string;
+  aiSeverity: string;
+  confidence: number;
+  probabilities: Record<string, number>;
+  finalSeverity: string;
+  onChangeFinal: (v: string) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+  isSubmitting: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
+
+        {/* Header */}
+        <div className="bg-amber-50 border-b border-amber-100 px-6 py-5 flex items-start gap-3">
+          <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
+            <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="font-bold text-gray-900 text-lg">Konfirmasi Severity</h3>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Prediksi AI berbeda dari pilihan Anda. Tentukan severity yang akan digunakan.
+            </p>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-5">
+
+          {/* Perbandingan */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border p-4 bg-gray-50 border-gray-200">
+              <p className="text-xs text-gray-400 font-medium mb-2">Pilihan Anda</p>
+              <span className={`inline-flex px-3 py-1 rounded-full text-sm font-semibold border ${SEVERITY_COLOR[userSeverity] ?? 'text-gray-600 bg-gray-100 border-gray-200'}`}>
+                {userSeverity}
+              </span>
+            </div>
+            <div className="rounded-2xl border p-4 bg-violet-50 border-violet-200">
+              <p className="text-xs text-violet-500 font-medium mb-2">Prediksi AI · {Math.round(confidence * 100)}%</p>
+              <span className={`inline-flex px-3 py-1 rounded-full text-sm font-semibold border ${SEVERITY_COLOR[aiSeverity] ?? 'text-gray-600 bg-gray-100 border-gray-200'}`}>
+                {aiSeverity}
+              </span>
+            </div>
+          </div>
+
+          {/* Probability bars */}
+          <div className="space-y-2">
+            <p className="text-xs text-gray-400 font-medium">Distribusi Probabilitas</p>
+            {Object.entries(probabilities)
+              .sort(([, a], [, b]) => b - a)
+              .map(([label, prob]) => (
+                <div key={label} className="flex items-center gap-3 text-sm">
+                  <span className="w-16 text-gray-600 font-medium">{label}</span>
+                  <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-violet-500 rounded-full transition-all"
+                      style={{ width: `${Math.round(prob * 100)}%` }}
+                    />
+                  </div>
+                  <span className="w-10 text-right text-gray-500 text-xs">{Math.round(prob * 100)}%</span>
+                </div>
+              ))}
+          </div>
+
+          {/* Dropdown pilih severity final */}
+          <div>
+            <label className="text-sm font-medium text-gray-700 block mb-2">
+              Gunakan severity:
+            </label>
+            <select
+              value={finalSeverity}
+              onChange={(e) => onChangeFinal(e.target.value)}
+              className="w-full border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-violet-500 text-gray-800 font-medium"
+            >
+              {['Low', 'Medium', 'High', 'Critical'].map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}{opt === aiSeverity ? ' (Prediksi AI)' : ''}{opt === userSeverity ? ' (Pilihan Anda)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 pb-6 flex gap-3">
+          <button
+            onClick={onCancel}
+            disabled={isSubmitting}
+            className="flex-1 border border-gray-200 text-gray-600 hover:bg-gray-50 transition py-3 rounded-2xl font-medium text-sm disabled:opacity-50"
+          >
+            Batal
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isSubmitting}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 transition text-white py-3 rounded-2xl font-semibold text-sm shadow-lg shadow-blue-600/20 disabled:opacity-50"
+          >
+            {isSubmitting ? 'Menyimpan...' : 'Lanjutkan'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -291,7 +412,18 @@ export default function AddMaintenancePage() {
     completion_date: '',
     cost: '',
     status: 'Scheduled',
+    jenis_kerusakan: '',
+    penyebab: '',
+    spare_part_digunakan: '',
   });
+
+  const [severityConflict, setSeverityConflict] = useState<{
+    userSeverity: string;
+    aiSeverity: string;
+    confidence: number;
+    probabilities: Record<string, number>;
+  } | null>(null);
+  const [conflictFinalSeverity, setConflictFinalSeverity] = useState('');
 
   const handleInputChange = (field: string, value: string) =>
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -299,6 +431,7 @@ export default function AddMaintenancePage() {
   const handleAssetSelect = (assetId: string) => {
     setPreselectedAssetError(null);
     handleInputChange('id_asset', assetId);
+    setSeverityConflict(null);
   };
 
   // Fetch gedung list
@@ -374,19 +507,20 @@ export default function AddMaintenancePage() {
 
   const selectedAsset = assets.find((a) => a.id === formData.id_asset);
 
-  const handleSubmit = async () => {
-    setErrorMsg(null);
-    if (!formData.id_asset || !formData.scheduled_date) {
-      setErrorMsg('Asset dan Scheduled Date harus diisi.');
-      return;
-    }
+  const doActualSubmit = async (finalSeverity: string) => {
     setIsSubmitting(true);
     try {
       const token = authApi.getToken();
       const response = await apiFetch('/api/maintenances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          severity:             finalSeverity,
+          jenis_kerusakan:      formData.jenis_kerusakan      || undefined,
+          penyebab:             formData.penyebab             || undefined,
+          spare_part_digunakan: formData.spare_part_digunakan || undefined,
+        }),
       });
       if (!response.ok) {
         const err = await response.json().catch(() => null);
@@ -411,9 +545,64 @@ export default function AddMaintenancePage() {
     }
   };
 
+  const handleSubmit = async () => {
+    setErrorMsg(null);
+    setSeverityConflict(null);
+    if (!formData.id_asset || !formData.scheduled_date) {
+      setErrorMsg('Asset dan Scheduled Date harus diisi.');
+      return;
+    }
+
+    // Jika field teks tersedia, prediksi severity dulu
+    if (formData.jenis_kerusakan && formData.penyebab && selectedAsset) {
+      setIsSubmitting(true);
+      try {
+        const token = authApi.getToken();
+        const sevRes = await fetch(`${API_URL}/api/predict-severity`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            jenis_kerusakan: formData.jenis_kerusakan,
+            penyebab:        formData.penyebab,
+            spare_part:      formData.spare_part_digunakan || '',
+            kategori:        selectedAsset.kategori?.nama    || '',
+            sub_kategori:    selectedAsset.subKategori?.nama || '',
+            tipe:            selectedAsset.tipe?.nama        || '',
+            biaya_perbaikan: formData.cost ? parseFloat(formData.cost) : 0,
+          }),
+        });
+        if (sevRes.ok) {
+          const sevData = await sevRes.json();
+          const aiSeverity: string = sevData.predicted_severity ?? '';
+          if (aiSeverity && aiSeverity !== formData.severity) {
+            setSeverityConflict({
+              userSeverity:  formData.severity,
+              aiSeverity,
+              confidence:    sevData.confidence    ?? 0,
+              probabilities: sevData.probabilities ?? {},
+            });
+            setConflictFinalSeverity(aiSeverity);
+            setIsSubmitting(false);
+            return; // tunggu keputusan user di modal
+          }
+        }
+      } catch {
+        // prediksi gagal, lanjut dengan pilihan user
+      }
+      setIsSubmitting(false);
+    }
+
+    await doActualSubmit(formData.severity);
+  };
+
+  const handleConflictConfirm = async () => {
+    setSeverityConflict(null);
+    await doActualSubmit(conflictFinalSeverity);
+  };
+
   return (
     <ProtectedRoute>
-      {/* RUL Result Modal — wrapped in AnimatePresence for enter/exit animation */}
+      {/* RUL Result Modal */}
       <AnimatePresence>
         {rulResult && (
           <RULResultModal
@@ -423,6 +612,21 @@ export default function AddMaintenancePage() {
           />
         )}
       </AnimatePresence>
+
+      {/* Severity Conflict Modal */}
+      {severityConflict && (
+        <SeverityConflictModal
+          userSeverity={severityConflict.userSeverity}
+          aiSeverity={severityConflict.aiSeverity}
+          confidence={severityConflict.confidence}
+          probabilities={severityConflict.probabilities}
+          finalSeverity={conflictFinalSeverity}
+          onChangeFinal={setConflictFinalSeverity}
+          onConfirm={handleConflictConfirm}
+          onCancel={() => setSeverityConflict(null)}
+          isSubmitting={isSubmitting}
+        />
+      )}
 
       <main className="flex min-h-screen bg-[#F5F7FB]">
         <Sidebar />
@@ -585,7 +789,60 @@ export default function AddMaintenancePage() {
                     ) : null;
                   })()}
                 </div>
+
+                {/* ── Field untuk klasifikasi severity AI ── */}
+                <div>
+                  <label className="text-sm font-medium text-gray-700">
+                    Jenis Kerusakan
+                    <span className="ml-1.5 text-xs text-violet-500 font-normal">(untuk prediksi severity)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="contoh: Mati mendadak, Kebocoran, Retak/pecah"
+                    value={formData.jenis_kerusakan}
+                    onChange={(e) => { handleInputChange('jenis_kerusakan', e.target.value); setSeverityConflict(null); }}
+                    className="w-full mt-2 border border-gray-200 rounded-2xl px-4 py-4 outline-none focus:ring-2 focus:ring-violet-400 text-black"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-gray-700">
+                    Penyebab
+                    <span className="ml-1.5 text-xs text-violet-500 font-normal">(untuk prediksi severity)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="contoh: Overload, Kelembaban tinggi, Usia pakai"
+                    value={formData.penyebab}
+                    onChange={(e) => { handleInputChange('penyebab', e.target.value); setSeverityConflict(null); }}
+                    className="w-full mt-2 border border-gray-200 rounded-2xl px-4 py-4 outline-none focus:ring-2 focus:ring-violet-400 text-black"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    Spare Part Digunakan
+                    <span className="ml-1.5 text-xs text-gray-400 font-normal">(opsional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="contoh: PCB board, Seal ring, Kompresor"
+                    value={formData.spare_part_digunakan}
+                    onChange={(e) => handleInputChange('spare_part_digunakan', e.target.value)}
+                    className="w-full mt-2 border border-gray-200 rounded-2xl px-4 py-4 outline-none focus:ring-2 focus:ring-violet-400 text-black"
+                  />
+                </div>
               </div>
+
+              {/* Catatan: prediksi severity AI dijalankan otomatis saat Schedule Maintenance ditekan */}
+              {formData.jenis_kerusakan && formData.penyebab && (
+                <p className="mt-3 text-xs text-violet-500 flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  AI akan memverifikasi severity saat Anda menekan Schedule Maintenance.
+                </p>
+              )}
             </section>
 
             {/* ACTIONS */}

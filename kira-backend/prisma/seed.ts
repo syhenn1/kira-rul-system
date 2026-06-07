@@ -663,6 +663,31 @@ Sedang	2,0	,5	1367000,0	1067000,0	327,0	Generic	Arsitektur	Tata Lingkungan	Lanta
   const assetsToInsert: any[] = [];
   const maintenancesToInsert: any[] = [];
   const maintenanceLogsToInsert: any[] = [];
+
+  const jenisKerusakanPool = [
+    'Mati mendadak', 'Kebocoran', 'Retak/pecah', 'Getaran berlebihan',
+    'Koneksi terputus', 'Korsleting', 'Aus/abrasi', 'Overheating',
+    'Tidak berfungsi', 'Suara berisik', 'Bocor refrigeran', 'Filter tersumbat',
+    'Daya tidak stabil', 'Layar mati', 'Pompa tidak bekerja',
+    'Kebocoran pipa', 'Sensor tidak responsif', 'Panel trip', 'Baterai lemah',
+    'Kompresor rusak',
+  ];
+
+  const penyebabPool = [
+    'Overload', 'Kelembaban tinggi', 'Usia pakai', 'Faktor lingkungan',
+    'Kurang pelumasan', 'Korosi', 'Human error', 'Tegangan tidak stabil',
+    'Debu dan kotoran', 'Beban berlebih', 'Kabel putus', 'Getaran mekanis',
+    'Suhu ekstrem', 'Pemeliharaan tertunda', 'Komponen aus',
+  ];
+
+  const sparePartPool = [
+    'PCB board', 'Seal ring', 'Kompresor', 'Kapasitor', 'Filter udara',
+    'Bearing', 'Belt/Sabuk', 'Motor listrik', 'Thermostat', 'Valve',
+    'Gasket', 'Pipa PVC', 'Lensa kamera', 'Pompa mini', 'Fuse/Sekring',
+    'Relay', 'Kontaktor', 'Lampu indikator', 'Sensor suhu', 'Suku cadang umum',
+    null, null, // beberapa record tanpa spare part (nullable)
+  ];
+
   const predictionsToInsert: any[] = [];
 
   function addDays(base: Date, days: number): Date {
@@ -764,6 +789,9 @@ Sedang	2,0	,5	1367000,0	1067000,0	327,0	Generic	Arsitektur	Tata Lingkungan	Lanta
           down_time: mStatus === 'Completed' ? Math.round(avg_downtime) : 0,
           cost: mStatus === 'Completed' ? cost_per_maint : 0,
           status: mStatus,
+          jenis_kerusakan:      pick(jenisKerusakanPool),
+          penyebab:             pick(penyebabPool),
+          spare_part_digunakan: pick(sparePartPool),
         });
 
         // ── Maintenance Logs: Scheduled → In Progress → Completed ──
