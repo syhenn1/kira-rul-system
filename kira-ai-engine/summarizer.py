@@ -7,6 +7,10 @@ import requests
 
 load_dotenv()
 
+# Overridable so load tests can point this at a local stub server instead of
+# the real HuggingFace Router (default preserves existing behavior).
+HF_ROUTER_URL = os.getenv("HF_ROUTER_URL", "https://router.huggingface.co/v1/chat/completions")
+
 # Delayed initialization: read env and create client when function called so
 # importing this module doesn't fail when environment isn't available at import time.
 
@@ -32,27 +36,48 @@ def fetch_asset_aggregates(company_id: str, limit: int = 20):
         port=parsed.port
     )
     cur = conn.cursor()
-    sql = """
+    # Latest prediction-history record per asset (one row per asset, most recent first).
+    latest_per_asset = """
+        SELECT DISTINCT ON (id_asset)
+               id_asset, maintenance_count, average_down_time, total_maintenance_cost,
+               max_maintenance_cost, mode_severity, predicted_rul, recorded_at
+        FROM asset_prediction_history
+        ORDER BY id_asset, recorded_at DESC
+    """
+    sql = f"""
     SELECT a.id, a.asset_name,
            COALESCE(m.nama, 'Generic') AS brand,
            COALESCE(k.nama, 'Mekanik') AS category,
            a.status,
            aph.maintenance_count, aph.average_down_time, aph.total_maintenance_cost,
            aph.max_maintenance_cost, aph.mode_severity, aph.predicted_rul, aph.recorded_at
-    FROM asset_prediction_history aph
+    FROM ({latest_per_asset}) aph
     JOIN assets a ON aph.id_asset = a.id
     JOIN companies c ON a.id_perusahaan = c.id
     LEFT JOIN merk m ON m.id = a.merk_id
     LEFT JOIN kategori k ON k.id = a.kategori_id
     WHERE c.id = %s
-    ORDER BY aph.recorded_at DESC
+    ORDER BY aph.predicted_rul ASC NULLS LAST
     LIMIT %s
     """
     cur.execute(sql, (company_id, limit))
     rows = cur.fetchall()
+
+    # True count of critical assets (RUL <= 180) across the whole company — independent
+    # of `limit`, so the frontend badge reflects the real population, not just the sample size.
+    count_sql = f"""
+    SELECT COUNT(*)
+    FROM ({latest_per_asset}) aph
+    JOIN assets a ON aph.id_asset = a.id
+    JOIN companies c ON a.id_perusahaan = c.id
+    WHERE c.id = %s AND aph.predicted_rul <= 180
+    """
+    cur.execute(count_sql, (company_id,))
+    critical_count = cur.fetchone()[0]
+
     cur.close()
     conn.close()
-    return rows
+    return rows, critical_count
 
 
 import re
@@ -126,18 +151,34 @@ def build_prompt(rows):
         })
             
         raw_text_for_nlp += f"{name} {brand} {category} {status} {mode_sev} "
-        
+
+        # Rule-based priority: RUL < 730 hari (2 tahun), status Scrap/Maintenance, atau riwayat
+        # severity tinggi. Setiap pemicu dicatat eksplisit sebagai "alasan" dan ditempelkan ke
+        # block-nya — supaya LLM tidak salah atribusi, mis. mengutip nilai RUL yang sebenarnya
+        # SEHAT (>730, kategori OK) sebagai "bukti urgensi" padahal aset itu masuk prioritas
+        # karena status operasional atau riwayat keparahan, bukan karena RUL-nya.
+        rul_is_concern = pred_rul is not None and pred_rul < 730
+        reasons = []
+        if rul_is_concern:
+            reasons.append(f"RUL rendah ({pred_rul} hari)")
+        if str(status).lower() in ['scrap', 'maintenance']:
+            reasons.append(f"status operasional saat ini '{status}'")
+        if str(mode_sev).lower() in ['critical', 'high']:
+            reasons.append(f"riwayat tingkat keparahan kerusakan '{mode_sev}'")
+        is_kritis = bool(reasons)
+
+        rul_line = f"Predicted RUL (hari): {pred_rul}"
+        if pred_rul is not None and not rul_is_concern:
+            rul_line += " — KATEGORI OK/SEHAT (bukan alasan kekritisan; jangan dikutip sebagai masalah)"
+
         block = (
             f"Asset: {name}\nBrand: {brand}\nCategory: {category}\nStatus: {status}\n"
             f"Maintenance count: {mcount}\nAverage downtime: {avg_dt}\nTotal maintenance cost: {total_cost}\n"
-            f"Max maintenance cost: {max_cost}\nMode severity: {mode_sev}\nPredicted RUL (months): {pred_rul}\nRecorded at: {recorded_at}"
+            f"Max maintenance cost: {max_cost}\nMode severity: {mode_sev}\n{rul_line}\nRecorded at: {recorded_at}"
         )
-        
-        # Rule-based priority: RUL < 24 bulan, status Scrap/Maintenance, atau severity tinggi
-        is_kritis = False
-        if (pred_rul is not None and pred_rul < 24) or (str(status).lower() in ['scrap', 'maintenance']) or (str(mode_sev).lower() in ['critical', 'high']):
-            is_kritis = True
-            
+        if is_kritis:
+            block += f"\nAlasan masuk prioritas tinggi: {'; '.join(reasons)}"
+
         if is_kritis:
             prioritas_tinggi.append(block)
         else:
@@ -153,14 +194,36 @@ def build_prompt(rows):
     teks_normal = "\n---\n".join(normal) if normal else "Tidak ada aset normal saat ini."
 
     instruction = (
-        "Anda adalah manajer aset senior yang menulis catatan harian kondisi aset untuk eksekutif perusahaan.\n\n"
-        "Tulis 2 kalimat ringkasan dalam Bahasa Indonesia yang terdengar seperti ditulis oleh manusia — lugas, langsung ke inti masalah, tanpa basa-basi.\n\n"
+        "Anda adalah manajer aset senior yang membaca data kondisi aset dan menuliskan ANALISIS-nya untuk eksekutif perusahaan — "
+        "bukan sekadar membacakan ulang isi data.\n\n"
+        "Tulis 2-3 kalimat ANALISIS dalam Bahasa Indonesia yang terdengar seperti ditulis oleh manusia — lugas, langsung ke inti, "
+        "tanpa basa-basi. Tugas Anda adalah membaca pola di balik angka-angka (mengapa sesuatu terjadi, apa kaitannya, apa dampaknya "
+        "ke depan) lalu menyampaikan KESIMPULAN dan IMPLIKASINYA — bukan menyebutkan ulang setiap angka satu per satu seolah membacakan formulir.\n\n"
+        "Threshold RUL (Remaining Useful Life) yang berlaku dalam sistem (satuan HARI):\n"
+        "- CRITICAL: RUL ≤ 180 hari — perlu penanganan segera\n"
+        "- HIGH: RUL ≤ 365 hari — prioritas tinggi\n"
+        "- WATCH: RUL ≤ 730 hari — perlu dipantau\n"
+        "- OK: RUL > 730 hari — kondisi baik\n\n"
         "Aturan wajib:\n"
-        "1. Mulai langsung dengan kondisi yang paling mendesak dari blok [PRIORITAS TINGGI]. Jangan buka dengan frasa seperti 'Berdasarkan data', 'Berikut adalah', 'Ringkasan menunjukkan', atau sejenisnya.\n"
-        "2. Gunakan kata ganti umum, bukan nama spesifik aset atau merek (contoh: 'sejumlah unit mekanikal', 'beberapa perangkat kategori electrical').\n"
-        "3. Kalimat kedua boleh menyebut kondisi aset yang normal sebagai konteks perbandingan, atau langsung berisi rekomendasi tindakan.\n"
-        "4. Jika tidak ada aset kritis, tulis secara singkat bahwa kondisi operasional aset perusahaan saat ini terpantau baik dan tidak ada tindakan mendesak yang diperlukan.\n"
-        "5. Jangan gunakan bullet point, angka berurutan, atau format markdown apapun.\n"
+        "1. JANGAN sekadar mendaftar ulang nilai individual satu per satu (mis. 'aset A RUL sekian hari, aset B biaya sekian'). "
+        "Sebaliknya, HUBUNGKAN beberapa data poin menjadi satu pemahaman: misalnya pola yang menjelaskan MENGAPA suatu kelompok "
+        "aset masuk prioritas tinggi (kombinasi RUL rendah + riwayat keparahan + status operasional), atau apa arti dari "
+        "perbandingan kondisi kritis vs normal terhadap beban kerja tim maintenance ke depan.\n"
+        "2. Mulai langsung dengan insight terpenting dari blok [PRIORITAS TINGGI] — bukan dengan menyebut angka mentah duluan, "
+        "tapi dengan apa MAKNA-nya. Jangan buka dengan frasa seperti 'Berdasarkan data', 'Berikut adalah', 'Ringkasan menunjukkan', atau sejenisnya.\n"
+        "3. Gunakan kata ganti umum, bukan nama spesifik aset atau merek (contoh: 'sejumlah unit mekanikal', 'beberapa perangkat kategori electrical').\n"
+        "4. Tutup dengan rekomendasi tindakan yang MENGALIR LOGIS dari analisis tersebut (akibat → tindakan), bukan saran generik "
+        "seperti 'perlu dipantau' tanpa konteks.\n"
+        "5. Jika tidak ada aset kritis, jelaskan secara analitis APA ARTI kondisi itu bagi perencanaan ke depan (mis. ruang untuk "
+        "fokus ke maintenance preventif, bukan reaktif) — jangan hanya menyatakan 'kondisi baik-baik saja' secara datar.\n"
+        "6. Jangan gunakan bullet point, angka berurutan, atau format markdown apapun.\n"
+        "7. Gunakan satuan HARI (bukan bulan) saat menyebut nilai RUL — dan sebutkan secukupnya saja sebagai pendukung analisis, "
+        "jangan jadikan deretan angka sebagai isi utama kalimat.\n"
+        "8. PENTING — setiap aset di [PRIORITAS TINGGI] punya baris 'Alasan masuk prioritas tinggi:' yang menjelaskan "
+        "pemicu SEBENARNYA (RUL rendah, status operasional, atau riwayat keparahan). Jika baris 'Predicted RUL' "
+        "ditandai 'KATEGORI OK/SEHAT', JANGAN sebutkan angka RUL tersebut sebagai bukti masalah — RUL aset itu sehat. "
+        "Sebutkan alasan aktualnya sesuai baris 'Alasan masuk prioritas tinggi'. Hanya kutip nilai RUL sebagai masalah "
+        "untuk aset yang alasannya memang 'RUL rendah'.\n"
     )
 
     prompt_data = (
@@ -170,7 +233,7 @@ def build_prompt(rows):
     )
 
     messages = [
-        {"role": "system", "content": "Kamu adalah manajer aset berpengalaman yang menulis laporan singkat kondisi aset dalam Bahasa Indonesia."},
+        {"role": "system", "content": "Kamu adalah manajer aset berpengalaman yang menganalisis data kondisi aset dan menuliskan insight singkatnya — bukan membacakan ulang data — dalam Bahasa Indonesia."},
         {"role": "user", "content": instruction + "\n\nData aset:\n\n" + prompt_data},
     ]
     return messages, extracted_assets
@@ -179,7 +242,7 @@ def build_prompt(rows):
 def _rule_based_summary(rows) -> str:
     """Fallback: generate a plain-text summary from the data without an LLM."""
     total = len(rows)
-    kritis = [r for r in rows if r[10] is not None and r[10] < 12]
+    kritis = [r for r in rows if r[10] is not None and r[10] < 365]
     normal = total - len(kritis)
     if not kritis:
         return (
@@ -191,7 +254,7 @@ def _rule_based_summary(rows) -> str:
     cat_str = " dan ".join(categories[:2])
     return (
         f"Terdapat {len(kritis)} unit aset kategori {cat_str} yang memerlukan perhatian segera "
-        f"dengan sisa umur di bawah 12 bulan. "
+        f"dengan sisa umur di bawah 365 hari. "
         f"Dari total {total} aset yang dipantau, {normal} unit lainnya masih beroperasi dalam kondisi normal."
     )
 
@@ -210,12 +273,12 @@ def summarize_company_assets(company_id: str, limit: int = 20, temperature: floa
     if not HF_TOKEN:
         raise RuntimeError("HF_TOKEN not set in environment")
 
-    rows = fetch_asset_aggregates(company_id, limit)
+    rows, critical_count = fetch_asset_aggregates(company_id, limit)
     if not rows:
-        return {"summary": "Tidak ada data aset untuk diringkas.", "assets": []}
+        return {"summary": "Tidak ada data aset untuk diringkas.", "assets": [], "critical_count": 0}
 
     messages, assets_data = build_prompt(rows)
-    url = "https://router.huggingface.co/v1/chat/completions"
+    url = HF_ROUTER_URL
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
         "Content-Type": "application/json",
@@ -237,7 +300,7 @@ def summarize_company_assets(company_id: str, limit: int = 20, temperature: floa
             response.raise_for_status()
             data = response.json()
             content = data["choices"][0]["message"]["content"].strip()
-            return {"summary": content, "assets": assets_data}
+            return {"summary": content, "assets": assets_data, "critical_count": critical_count}
         except Exception as e:
             last_error = e
             continue  # try next model
@@ -247,6 +310,7 @@ def summarize_company_assets(company_id: str, limit: int = 20, temperature: floa
     return {
         "summary": _rule_based_summary(rows),
         "assets": assets_data,
+        "critical_count": critical_count,
     }
 
 

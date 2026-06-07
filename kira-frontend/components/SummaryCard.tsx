@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { authApi } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 
@@ -12,9 +11,10 @@ const LOADING_STATES = [
   'Generating insights...',
 ];
 
-export default function SummaryCard() {
+export default function SummaryCard({ onSelectAsset }: { onSelectAsset?: (assetId: string) => void }) {
   const [summary, setSummary] = useState<string>('');
   const [assets, setAssets] = useState<{ id: string, name: string, brand: string, category: string, status: string, pred_rul: number | null }[]>([]);
+  const [criticalCount, setCriticalCount] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingStep, setLoadingStep] = useState(0);
@@ -55,6 +55,7 @@ export default function SummaryCard() {
         const data = await response.json();
         setSummary(data.summary || 'Tidak ada ringkasan yang tersedia.');
         setAssets(data.assets || []);
+        setCriticalCount(typeof data.critical_count === 'number' ? data.critical_count : 0);
       } catch (fetchError) {
         if ((fetchError as Error).name !== 'AbortError') {
           setError('Tidak dapat memuat ringkasan. Cek backend atau AI engine.');
@@ -74,7 +75,7 @@ export default function SummaryCard() {
   }, []);
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl p-6 shadow-lg transition-all duration-500 
+    <div className={`relative overflow-hidden rounded-2xl p-6 shadow-lg transition-all duration-500
       ${isLoading ? 'bg-white' : 'bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 text-white'}`}
     >
       {/* Decorative background shapes */}
@@ -134,38 +135,44 @@ export default function SummaryCard() {
               {summary}
             </p>
 
-            {assets.length > 0 && (
-              <div className="mt-6 pt-5 border-t border-white/10">
-                <h3 className="text-xs font-semibold text-blue-200 uppercase tracking-wider mb-3">
-                  Aset Terkait (Quick Access)
-                </h3>
-                <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
-                  {assets.slice(0, 5).map((asset) => (
-                    <Link
-                      key={asset.id}
-                      href={`/assets/${asset.id}`}
-                      className="group shrink-0 w-48 flex flex-col p-3 rounded-xl bg-white/10 text-white border border-white/20 hover:bg-white/20 transition-all duration-300 shadow-sm backdrop-blur-md"
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+            {(() => {
+              const criticalAssets = assets.filter((a) => a.pred_rul != null && a.pred_rul <= 180);
+              return criticalCount > 0 ? (
+                <div className="mt-6 pt-5 border-t border-white/10">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse shrink-0"></span>
+                    <h3 className="text-xs font-semibold text-red-300 uppercase tracking-wider">
+                      Aset Kritis — Segera Ditangani ({criticalCount})
+                    </h3>
+                  </div>
+                  <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
+                    {criticalAssets.slice(0, 5).map((asset) => (
+                      <button
+                        key={asset.id}
+                        onClick={() => onSelectAsset?.(asset.id)}
+                        className="group shrink-0 w-48 flex flex-col p-3 rounded-xl bg-red-500/20 text-white border border-red-400/40 hover:bg-red-500/30 transition-all duration-300 shadow-sm backdrop-blur-md text-left"
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center text-red-600 shrink-0">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path></svg>
+                          </div>
+                          <p className="font-semibold text-xs leading-tight text-white truncate" title={asset.name}>{asset.name}</p>
                         </div>
-                        <p className="font-semibold text-xs leading-tight text-white truncate" title={asset.name}>{asset.name}</p>
-                      </div>
-                      <p className="text-[10px] text-blue-200 truncate mb-2">{asset.brand} • {asset.category}</p>
-                      <div className="flex justify-between items-center pt-2 border-t border-white/10">
-                        <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-full ${asset.status?.toLowerCase() === 'scrap' || asset.status?.toLowerCase() === 'maintenance' ? 'bg-red-500/30 text-red-100' : 'bg-green-500/30 text-green-100'}`}>
-                          {asset.status || '—'}
-                        </span>
-                        <span className="text-[10px] font-medium bg-blue-900/50 text-blue-100 px-1.5 py-0.5 rounded border border-blue-800/50">
-                          {asset.pred_rul != null ? `${asset.pred_rul} bln` : 'N/A'}
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
+                        <p className="text-[10px] text-red-200 truncate mb-2">{asset.brand} • {asset.category}</p>
+                        <div className="flex justify-between items-center pt-2 border-t border-red-400/20">
+                          <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-full ${asset.status?.toLowerCase() === 'scrap' || asset.status?.toLowerCase() === 'maintenance' ? 'bg-red-500/40 text-red-100' : 'bg-orange-500/30 text-orange-100'}`}>
+                            {asset.status || '—'}
+                          </span>
+                          <span className="text-[10px] font-bold bg-red-700/50 text-red-100 px-1.5 py-0.5 rounded border border-red-600/50">
+                            {asset.pred_rul} hari
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : null;
+            })()}
           </div>
         )}
       </div>

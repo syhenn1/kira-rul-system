@@ -1,12 +1,8 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { Pool } from 'pg';
+import prisma from '../lib/prisma';
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-production';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
@@ -31,6 +27,14 @@ export const register = async (req: Request, res: Response) => {
     const user = await prisma.user.create({
       data: { name, email, password: hashed },
     });
+
+    // Auto-join the first company if one exists (single-tenant setup)
+    const company = await prisma.company.findFirst();
+    if (company) {
+      await prisma.companyMember.create({
+        data: { id_user: user.id, id_perusahaan: company.id, role: 'Member' },
+      });
+    }
 
     const token = signToken(user.id, user.email);
     return res.status(201).json({

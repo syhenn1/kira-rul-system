@@ -1,17 +1,17 @@
 'use client';
 
-import Link from 'next/link';
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Swal from 'sweetalert2';
 
 import Sidebar from '@/components/Sidebar';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import AddAssetModal from '@/components/AddAssetModal';
 import AssetAddedModal, { type AssetAddedResult } from '@/components/AssetAddedModal';
+import AssetDetailPanel from '@/components/AssetDetailPanel';
 import Tooltip from '@/components/Tooltip';
 import TourOverlay from '@/components/TourOverlay';
+import Pagination from '@/components/Pagination';
 import { apiFetch } from '@/lib/api';
 import { authApi } from '@/lib/auth';
 
@@ -42,11 +42,30 @@ type Pagination = {
   totalPages: number;
 };
 
+type LookupItem = { id: string; nama: string };
+type GedungItem = { id: string; nama: string; kode: string };
+
+const SORT_OPTIONS = [
+  { value: 'name_asc',  label: 'Nama A–Z' },
+  { value: 'name_desc', label: 'Nama Z–A' },
+  { value: 'rul_asc',   label: 'RUL Terendah' },
+  { value: 'rul_desc',  label: 'RUL Tertinggi' },
+  { value: 'date_desc', label: 'Maintenance Terbaru' },
+  { value: 'date_asc',  label: 'Maintenance Terlama' },
+];
+
+const RUL_PRESETS = [
+  { label: 'Kritis  < 6 bln',   min: '',    max: '180'  },
+  { label: '6–12 bln',          min: '180', max: '365'  },
+  { label: '1–2 thn',           min: '365', max: '730'  },
+  { label: 'Sehat  > 2 thn',    min: '730', max: ''     },
+];
+
 const TOUR_STEPS = [
   {
     target: 'add-asset-btn',
     title: 'Tambah Aset Baru',
-    desc: 'Klik tombol ini untuk mendaftarkan aset baru. Anda akan memilih gedung lokasi lalu mengisi detail aset.',
+    desc: 'Klik tombol ini untuk mendaftarkan aset baru.',
   },
   {
     target: 'asset-search',
@@ -54,9 +73,9 @@ const TOUR_STEPS = [
     desc: 'Ketik nama aset untuk menyaringnya secara real-time.',
   },
   {
-    target: 'asset-status-filter',
-    title: 'Filter Status',
-    desc: 'Filter aset berdasarkan status: Active, Maintenance, atau Inactive.',
+    target: 'asset-filter-panel',
+    title: 'Filter & Urutkan',
+    desc: 'Saring berdasarkan status, RUL range, kategori, kekritisan, dan lokasi. Urutkan berdasarkan RUL atau nama.',
   },
   {
     target: 'asset-table',
@@ -72,25 +91,67 @@ export default function AssetsPage() {
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 10, total: 0, totalPages: 1 });
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [sortBy, setSortBy] = useState('name_asc');
+  const [rulMin, setRulMin] = useState('');
+  const [rulMax, setRulMax] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [criticalityFilter, setCriticalityFilter] = useState('');
+  const [gedungFilter, setGedungFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [assetResult, setAssetResult] = useState<AssetAddedResult | null>(null);
   const [assetImage, setAssetImage] = useState<string | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [detailAssetId, setDetailAssetId] = useState<string | null>(null);
+  const [categories, setCategories] = useState<LookupItem[]>([]);
+  const [gedungs, setGedungs] = useState<GedungItem[]>([]);
 
-  const fetchAssets = useCallback(async (page: number, q: string, status: string) => {
+  // Load lookup data once
+  useEffect(() => {
+    const token = authApi.getToken();
+    Promise.all([
+      apiFetch('/api/lookup/kategori', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+      apiFetch('/api/gedung', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+    ]).then(([cats, geds]) => {
+      setCategories(cats.data ?? []);
+      setGedungs(geds.gedung ?? []);
+    }).catch(() => {});
+  }, []);
+
+  const fetchAssets = useCallback(async (
+    page: number,
+    q: string,
+    status: string,
+    sort: string,
+    rMin: string,
+    rMax: string,
+    cat: string,
+    crit: string,
+    ged: string,
+  ) => {
     setLoading(true);
+    setFetchError(null);
     try {
       const token = authApi.getToken();
-      const params = new URLSearchParams({
-        page: String(page),
-        limit: '10',
-        ...(q ? { search: q } : {}),
-        ...(status ? { status } : {}),
-      });
+      const params = new URLSearchParams({ page: String(page), limit: '10' });
+      if (q)    params.set('search', q);
+      if (status) params.set('status', status);
+      if (sort)  params.set('sort_by', sort);
+      if (rMin)  params.set('rul_min', rMin);
+      if (rMax)  params.set('rul_max', rMax);
+      if (cat)   params.set('category', cat);
+      if (crit)  params.set('criticality', crit);
+      if (ged)   params.set('gedung_id', ged);
+
       const res = await apiFetch(`/api/assets?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (res.status === 401) {
+        setFetchError('Sesi login kadaluarsa. Silakan logout lalu login ulang.');
+        return;
+      }
       if (!res.ok) throw new Error('Gagal memuat data aset');
       const body = await res.json();
       setAssets(body.data || []);
@@ -98,24 +159,56 @@ export default function AssetsPage() {
       setPagination(body.pagination || { page: 1, limit: 10, total: 0, totalPages: 1 });
     } catch (err) {
       console.error(err);
+      setFetchError('Tidak dapat terhubung ke server. Pastikan backend berjalan.');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Debounce search
+  // Debounce all filter changes
+  const filterState = { search, statusFilter, sortBy, rulMin, rulMax, categoryFilter, criticalityFilter, gedungFilter };
+  const filterRef = useRef(filterState);
+  filterRef.current = filterState;
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setCurrentPage(1);
-      fetchAssets(1, search, statusFilter);
+      const f = filterRef.current;
+      fetchAssets(1, f.search, f.statusFilter, f.sortBy, f.rulMin, f.rulMax, f.categoryFilter, f.criticalityFilter, f.gedungFilter);
     }, 350);
     return () => clearTimeout(timer);
-  }, [search, statusFilter, fetchAssets]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, statusFilter, sortBy, rulMin, rulMax, categoryFilter, criticalityFilter, gedungFilter, fetchAssets]);
 
   useEffect(() => {
-    fetchAssets(currentPage, search, statusFilter);
+    const f = filterRef.current;
+    fetchAssets(currentPage, f.search, f.statusFilter, f.sortBy, f.rulMin, f.rulMax, f.categoryFilter, f.criticalityFilter, f.gedungFilter);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage]);
+
+  const activeFilterCount = [statusFilter, rulMin, rulMax, categoryFilter, criticalityFilter, gedungFilter].filter(Boolean).length;
+
+  const clearAllFilters = () => {
+    setStatusFilter('');
+    setRulMin('');
+    setRulMax('');
+    setCategoryFilter('');
+    setCriticalityFilter('');
+    setGedungFilter('');
+    setSortBy('name_asc');
+    setCurrentPage(1);
+  };
+
+  const applyRulPreset = (min: string, max: string) => {
+    setRulMin(min);
+    setRulMax(max);
+    setCurrentPage(1);
+  };
+
+  const refreshAssets = () => {
+    const f = filterRef.current;
+    fetchAssets(currentPage, f.search, f.statusFilter, f.sortBy, f.rulMin, f.rulMax, f.categoryFilter, f.criticalityFilter, f.gedungFilter);
+  };
 
   const handleDelete = async (asset: Asset) => {
     const result = await Swal.fire({
@@ -141,7 +234,7 @@ export default function AssetsPage() {
         throw new Error(err.error || 'Gagal menghapus aset');
       }
       await Swal.fire({ title: 'Dihapus!', text: 'Aset berhasil dihapus.', icon: 'success', confirmButtonColor: '#2563eb' });
-      fetchAssets(currentPage, search, statusFilter);
+      refreshAssets();
     } catch (err) {
       Swal.fire({ title: 'Gagal', text: (err as Error).message, icon: 'error', confirmButtonColor: '#ef4444' });
     }
@@ -157,6 +250,14 @@ export default function AssetsPage() {
     s === 'Maintenance' ? 'bg-orange-100 text-orange-700' :
     s === 'Inactive'    ? 'bg-gray-100 text-gray-600' :
                           'bg-blue-100 text-blue-700';
+
+  const rulBadge = (rul: number | null) => {
+    if (rul == null) return { color: 'text-gray-400', bg: '' };
+    if (rul <= 180)  return { color: 'text-red-600',    bg: 'bg-red-50' };
+    if (rul <= 365)  return { color: 'text-orange-500', bg: 'bg-orange-50' };
+    if (rul <= 730)  return { color: 'text-yellow-600', bg: 'bg-yellow-50' };
+    return { color: 'text-green-600', bg: 'bg-green-50' };
+  };
 
   const byStatus = stats.by_status;
 
@@ -193,34 +294,164 @@ export default function AssetsPage() {
           <StatCard title="Inactive"      value={String(byStatus['Inactive'] ?? 0)} />
         </div>
 
-        {/* SEARCH + FILTER */}
-        <div className="bg-white rounded-3xl border shadow-sm p-6 mb-8 animate-[enterUp_0.5s_0.14s_ease-out_both]">
-          <div className="flex gap-4">
-            <Tooltip content="Cari aset berdasarkan nama, brand, atau kategori" position="bottom">
-              <input
-                data-tour="asset-search"
-                type="text"
-                placeholder="Search assets..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 border rounded-2xl px-5 py-4 outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder:text-gray-400 transition"
-              />
-            </Tooltip>
+        {/* SEARCH + FILTER PANEL */}
+        <div
+          data-tour="asset-filter-panel"
+          className="bg-white rounded-3xl border shadow-sm p-6 mb-8 animate-[enterUp_0.5s_0.14s_ease-out_both]"
+        >
+          {/* Row 1: Search + Status + Sort + Filter toggle */}
+          <div className="flex gap-4 flex-wrap">
+            <input
+              data-tour="asset-search"
+              type="text"
+              placeholder="Search assets…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="flex-1 min-w-50 border rounded-2xl px-5 py-3.5 outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder:text-gray-400 transition"
+            />
 
-            <Tooltip content="Filter aset berdasarkan status" position="bottom">
-              <select
-                data-tour="asset-status-filter"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="border rounded-2xl px-5 py-4 text-gray-600 cursor-pointer outline-none focus:ring-2 focus:ring-blue-500"
+            <select
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+              className="border rounded-2xl px-4 py-3.5 text-gray-600 cursor-pointer outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Status</option>
+              <option value="Active">Active</option>
+              <option value="Maintenance">Maintenance</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+
+            <select
+              value={sortBy}
+              onChange={(e) => { setSortBy(e.target.value); setCurrentPage(1); }}
+              className="border rounded-2xl px-4 py-3.5 text-gray-600 cursor-pointer outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+
+            <button
+              onClick={() => setFilterOpen((v) => !v)}
+              className={`flex items-center gap-2 border rounded-2xl px-5 py-3.5 font-medium transition ${
+                filterOpen || activeFilterCount > 0
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+              </svg>
+              Filter
+              {activeFilterCount > 0 && (
+                <span className="bg-white text-blue-600 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
+            {activeFilterCount > 0 && (
+              <button
+                onClick={clearAllFilters}
+                className="text-gray-400 hover:text-red-500 transition text-sm font-medium self-center"
               >
-                <option value="">All Status</option>
-                <option value="Active">Active</option>
-                <option value="Maintenance">Maintenance</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-            </Tooltip>
+                Reset semua
+              </button>
+            )}
           </div>
+
+          {/* Row 2: Expandable advanced filters */}
+          {filterOpen && (
+            <div className="mt-6 pt-6 border-t grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+
+              {/* RUL Range */}
+              <div className="md:col-span-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Range RUL (hari)</p>
+                <div className="flex gap-2 items-center mb-3">
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Min"
+                    value={rulMin}
+                    onChange={(e) => { setRulMin(e.target.value); setCurrentPage(1); }}
+                    className="w-full border rounded-xl px-4 py-2.5 text-sm text-black outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-gray-400 text-sm shrink-0">–</span>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Max"
+                    value={rulMax}
+                    onChange={(e) => { setRulMax(e.target.value); setCurrentPage(1); }}
+                    className="w-full border rounded-xl px-4 py-2.5 text-sm text-black outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {RUL_PRESETS.map((p) => {
+                    const active = rulMin === p.min && rulMax === p.max;
+                    return (
+                      <button
+                        key={p.label}
+                        onClick={() => applyRulPreset(p.min, p.max)}
+                        className={`text-xs px-3 py-1.5 rounded-full border transition font-medium ${
+                          active
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'text-gray-600 hover:border-blue-400 hover:text-blue-600'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Category */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Kategori</p>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
+                  className="w-full border rounded-xl px-4 py-2.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Semua Kategori</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.nama}>{c.nama}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Criticality */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Kekritisan</p>
+                <select
+                  value={criticalityFilter}
+                  onChange={(e) => { setCriticalityFilter(e.target.value); setCurrentPage(1); }}
+                  className="w-full border rounded-xl px-4 py-2.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Semua Level</option>
+                  <option value="Critical">Critical</option>
+                  <option value="Major">Major</option>
+                  <option value="Minor">Minor</option>
+                </select>
+              </div>
+
+              {/* Location */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Lokasi Gedung</p>
+                <select
+                  value={gedungFilter}
+                  onChange={(e) => { setGedungFilter(e.target.value); setCurrentPage(1); }}
+                  className="w-full border rounded-xl px-4 py-2.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Semua Gedung</option>
+                  {gedungs.map((g) => (
+                    <option key={g.id} value={g.id}>{g.nama}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* TABLE */}
@@ -236,7 +467,17 @@ export default function AssetsPage() {
                   <th className="px-6 py-5">Category</th>
                   <th className="px-6 py-5">Status</th>
                   <th className="px-6 py-5">Location</th>
-                  <th className="px-6 py-5">RUL (bulan)</th>
+                  <th className="px-6 py-5">
+                    <button
+                      onClick={() => setSortBy(sortBy === 'rul_asc' ? 'rul_desc' : 'rul_asc')}
+                      className="flex items-center gap-1 hover:text-blue-600 transition"
+                    >
+                      RUL (hari)
+                      {sortBy === 'rul_asc'  && <span>↑</span>}
+                      {sortBy === 'rul_desc' && <span>↓</span>}
+                      {sortBy !== 'rul_asc' && sortBy !== 'rul_desc' && <span className="opacity-30">↕</span>}
+                    </button>
+                  </th>
                   <th className="px-6 py-5">Last Action</th>
                   <th className="px-6 py-5">Action</th>
                 </tr>
@@ -249,6 +490,12 @@ export default function AssetsPage() {
                       Memuat data aset...
                     </td>
                   </tr>
+                ) : fetchError ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-16 text-center text-red-500">
+                      {fetchError}
+                    </td>
+                  </tr>
                 ) : assets.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-6 py-16 text-center text-gray-400">
@@ -256,97 +503,83 @@ export default function AssetsPage() {
                     </td>
                   </tr>
                 ) : (
-                  assets.map((asset, i) => (
-                    <tr
-                      key={asset.id}
-                      className="stagger-item border-b hover:bg-gray-50 transition"
-                      style={{ animationDelay: `${i * 40}ms` }}
-                    >
-                      <td className="px-6 py-5 font-semibold text-[#111827]">
-                        <Link href={`/assets/${asset.id}`} className="hover:text-blue-600 transition">
-                          {asset.asset_name}
-                        </Link>
-                        <p className="text-xs text-gray-400 font-normal mt-0.5">{asset.brand}</p>
-                      </td>
-                      <td className="px-6 py-5 text-gray-600">
-                        {asset.category}
-                        <p className="text-xs text-gray-400 mt-0.5">{asset.type}</p>
-                      </td>
-                      <td className="px-6 py-5">
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColor(asset.status)}`}>
-                          {asset.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-5 text-gray-600">
-                        {asset.gedung?.nama ?? <span className="text-gray-400">-</span>}
-                      </td>
-                      <td className="px-6 py-5">
-                        {asset.predicted_rul != null ? (
-                          <span className={`font-semibold ${
-                            asset.predicted_rul <= 6  ? 'text-red-600'    :
-                            asset.predicted_rul <= 12 ? 'text-orange-500' :
-                            asset.predicted_rul <= 24 ? 'text-yellow-600' :
-                                                        'text-green-600'
-                          }`}>
-                            {asset.predicted_rul} bln
+                  assets.map((asset, i) => {
+                    const rul = rulBadge(asset.predicted_rul);
+                    return (
+                      <tr
+                        key={asset.id}
+                        onClick={() => setDetailAssetId(asset.id)}
+                        className="stagger-item border-b hover:bg-gray-50 transition cursor-pointer"
+                        style={{ animationDelay: `${i * 40}ms` }}
+                      >
+                        <td className="px-6 py-5 font-semibold text-[#111827]">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDetailAssetId(asset.id); }}
+                            className="hover:text-blue-600 transition text-left"
+                          >
+                            {asset.asset_name}
+                          </button>
+                          <p className="text-xs text-gray-400 font-normal mt-0.5">{asset.brand}</p>
+                        </td>
+                        <td className="px-6 py-5 text-gray-600">
+                          {asset.category}
+                          <p className="text-xs text-gray-400 mt-0.5">{asset.type}</p>
+                        </td>
+                        <td className="px-6 py-5">
+                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColor(asset.status)}`}>
+                            {asset.status}
                           </span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-5 text-gray-500 text-sm">{formatDate(asset.last_action)}</td>
-                      <td className="px-6 py-5">
-                        <div className="flex gap-3">
-                          <Tooltip content="Lihat detail aset" position="top">
-                            <Link href={`/assets/${asset.id}`} className="text-blue-600 hover:text-blue-700 font-medium transition">
-                              View
-                            </Link>
-                          </Tooltip>
-                          <Tooltip content="Edit aset" position="top">
-                            <Link href={`/assets/${asset.id}/edit`} className="text-gray-500 hover:text-gray-700 font-medium transition">
-                              Edit
-                            </Link>
-                          </Tooltip>
-                          <Tooltip content="Hapus aset dari sistem" position="top">
-                            <button
-                              onClick={() => handleDelete(asset)}
-                              className="text-red-500 hover:text-red-600 font-medium transition"
-                            >
-                              Delete
-                            </button>
-                          </Tooltip>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                        <td className="px-6 py-5 text-gray-600">
+                          {asset.gedung?.nama ?? <span className="text-gray-400">-</span>}
+                        </td>
+                        <td className="px-6 py-5">
+                          {asset.predicted_rul != null ? (
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-sm font-semibold ${rul.color} ${rul.bg}`}>
+                              {asset.predicted_rul} hari
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-5 text-gray-500 text-sm">{formatDate(asset.last_action)}</td>
+                        <td className="px-6 py-5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex gap-3">
+                            <Tooltip content="Lihat & ubah detail aset" position="top">
+                              <button
+                                onClick={() => setDetailAssetId(asset.id)}
+                                className="text-blue-600 hover:text-blue-700 font-medium transition"
+                              >
+                                View
+                              </button>
+                            </Tooltip>
+                            <Tooltip content="Hapus aset dari sistem" position="top">
+                              <button
+                                onClick={() => handleDelete(asset)}
+                                className="text-red-500 hover:text-red-600 font-medium transition"
+                              >
+                                Delete
+                              </button>
+                            </Tooltip>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
 
           {/* PAGINATION */}
-          <div className="flex items-center justify-between px-6 py-5">
-            <p className="text-gray-500 text-sm">
-              {pagination.total === 0
-                ? 'Tidak ada data'
-                : `Menampilkan ${(pagination.page - 1) * pagination.limit + 1}–${Math.min(pagination.page * pagination.limit, pagination.total)} dari ${pagination.total} aset`}
-            </p>
-            <div className="flex gap-2">
-              {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setCurrentPage(p)}
-                  className={`w-10 h-10 rounded-xl text-sm font-medium transition ${
-                    p === pagination.page
-                      ? 'bg-blue-600 text-white'
-                      : 'border hover:bg-gray-50 text-gray-600'
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            limit={pagination.limit}
+            itemLabel="aset"
+            onPageChange={setCurrentPage}
+          />
         </div>
       </main>
 
@@ -359,7 +592,6 @@ export default function AssetsPage() {
         }}
       />
 
-      {/* Asset success modal — appears after PIN is confirmed and asset is saved */}
       {assetResult && (
         <AssetAddedModal
           result={assetResult}
@@ -376,6 +608,12 @@ export default function AssetsPage() {
           }}
         />
       )}
+
+      <AssetDetailPanel
+        assetId={detailAssetId}
+        onClose={() => setDetailAssetId(null)}
+        onSaved={refreshAssets}
+      />
     </ProtectedRoute>
   );
 }

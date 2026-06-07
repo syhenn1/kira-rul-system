@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import React, { useState } from 'react';
+import { authApi } from '@/lib/auth';
 
 import {
   LayoutDashboard,
@@ -11,10 +12,10 @@ import {
   HardHat,
   Bell,
   FileText,
-  History,
   Settings,
   ChevronDown,
   Building2,
+  LogOut,
 } from 'lucide-react';
 
 type MenuItem = {
@@ -39,27 +40,27 @@ const menus: MenuItem[] = [
     name: 'Maintenance',
     icon: Wrench,
     href: '/maintenance',
-    children: [
-      { name: 'Gedung A', href: '/maintenance/gedung-a' },
-      { name: 'Gedung B', href: '/maintenance/gedung-b' },
-      { name: 'Gedung C', href: '/maintenance/gedung-c' },
-    ],
   },
   { name: 'Gedung', icon: Building2, href: '/gedung' },
   { name: 'Teknisi', icon: HardHat, href: '/users' },
   { name: 'Alerts', icon: Bell, href: '/alerts' },
   { name: 'Reports', icon: FileText, href: '/reports' },
-  { name: 'Activity Logs', icon: History, href: '/activity-logs' },
   { name: 'Settings', icon: Settings, href: '/settings' },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
 
   const [openMenus, setOpenMenus] = useState<{ [key: string]: boolean }>({
     Assets: pathname.startsWith('/assets'),
     Maintenance: pathname.startsWith('/maintenance'),
   });
+
+  const handleLogout = () => {
+    authApi.logout();
+    router.push('/login');
+  };
 
   return (
     <aside className="fixed left-0 top-0 w-64 h-screen bg-[#18181B] text-white p-6 flex flex-col overflow-y-auto">
@@ -153,6 +154,17 @@ export default function Sidebar() {
           );
         })}
       </nav>
+
+      {/* LOGOUT */}
+      <div className="mt-auto pt-6 border-t border-white/10">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-400 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200"
+        >
+          <LogOut size={18} />
+          <span className="text-sm font-medium">Logout</span>
+        </button>
+      </div>
     </aside>
   );
 }

@@ -2,11 +2,14 @@
 
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
-import Link from 'next/link';
+import PaginationBar from '@/components/Pagination';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import TourOverlay from '@/components/TourOverlay';
 import Tooltip from '@/components/Tooltip';
+import AddMaintenanceModal from '@/components/AddMaintenanceModal';
+import MaintenanceScheduledModal, { type MaintenanceScheduledResult } from '@/components/MaintenanceScheduledModal';
 import Swal from 'sweetalert2';
+import { Maximize2, PanelRight, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const TOUR_STEPS = [
@@ -39,6 +42,15 @@ const TOUR_STEPS = [
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+const SORT_OPTIONS = [
+  { value: 'date_desc',  label: 'Terbaru' },
+  { value: 'date_asc',   label: 'Terlama' },
+  { value: 'name_asc',   label: 'Nama Aset A–Z' },
+  { value: 'name_desc',  label: 'Nama Aset Z–A' },
+  { value: 'cost_desc',  label: 'Biaya Tertinggi' },
+  { value: 'cost_asc',   label: 'Biaya Terendah' },
+];
+
 type RelatedUser = {
   id: string;
   name: string;
@@ -46,6 +58,15 @@ type RelatedUser = {
 };
 
 type LookupRef = { id: string; kode: string; nama: string } | null;
+
+type TechnicianOption = {
+  id: string;
+  name: string;
+  email: string;
+  specialization: string;
+  phone?: string | null;
+  status: string;
+};
 
 type MaintenanceItem = {
   id: string;
@@ -57,8 +78,6 @@ type MaintenanceItem = {
   down_time?: number;
   cost: number;
   status: string;
-  latestStatus?: string;
-  currentStatusFromLog?: string;
   asset?: {
     id: string;
     asset_name: string;
@@ -70,7 +89,8 @@ type MaintenanceItem = {
     status?: string;
   };
   user?: RelatedUser;
-  assignedTechnician?: RelatedUser | null;
+  assignedTechnician?: TechnicianOption | null;
+  technician?: TechnicianOption | null;
   logs?: Array<{
     id: string;
     status: string;
@@ -81,7 +101,7 @@ type MaintenanceItem = {
     cost?: number;
     created_at: string;
     user?: RelatedUser;
-    technician?: RelatedUser | null;
+    technician?: TechnicianOption | null;
   }>;
   prediction_history?: Array<{
     id: string;
@@ -108,30 +128,13 @@ type AssetOption = {
   criticality_level?: string;
 };
 
-const withCurrentStatus = (maintenance: MaintenanceItem): MaintenanceItem => {
-  const latestStatus = maintenance.latestStatus || maintenance.currentStatusFromLog || maintenance.logs?.[0]?.status || maintenance.status;
-
-  return {
-    ...maintenance,
-    latestStatus,
-    currentStatusFromLog: latestStatus,
-  };
-};
-
-const toDateTimeLocalValue = (date?: string | null) => {
-  if (!date) return '';
-
-  const parsed = new Date(date);
-  if (Number.isNaN(parsed.getTime())) return '';
-
-  return parsed.toISOString().slice(0, 16);
-};
-
 export default function MaintenancePage() {
   const [maintenances, setMaintenances] = useState<MaintenanceItem[]>([]);
   const [selectedMaintenance, setSelectedMaintenance] = useState<MaintenanceItem | null>(null);
   const [isAddLogOpen, setIsAddLogOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [scheduledResult, setScheduledResult] = useState<MaintenanceScheduledResult | null>(null);
   const [pagination, setPagination] = useState<Pagination>({
     page: 1,
     limit: 10,
@@ -141,6 +144,7 @@ export default function MaintenancePage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [severityFilter, setSeverityFilter] = useState('');
+  const [sortBy, setSortBy] = useState('date_desc');
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -154,9 +158,10 @@ export default function MaintenancePage() {
     if (search.trim()) params.set('search', search.trim());
     if (statusFilter) params.set('status', statusFilter);
     if (severityFilter) params.set('severity', severityFilter);
+    if (sortBy) params.set('sort_by', sortBy);
 
     return params.toString();
-  }, [page, search, statusFilter, severityFilter]);
+  }, [page, search, statusFilter, severityFilter, sortBy]);
 
   const fetchMaintenances = useCallback(async (signal?: AbortSignal) => {
       setIsLoading(true);
@@ -177,7 +182,7 @@ export default function MaintenancePage() {
         }
 
         const result = await response.json();
-        const fetchedMaintenances: MaintenanceItem[] = (result.data || []).map(withCurrentStatus);
+        const fetchedMaintenances: MaintenanceItem[] = result.data || [];
 
         setMaintenances(fetchedMaintenances);
         setPagination(result.pagination || {
@@ -272,8 +277,21 @@ export default function MaintenancePage() {
     setPage(1);
   };
 
+  const handleSortChange = (value: string) => {
+    setSortBy(value);
+    setPage(1);
+  };
+
   const getCurrentStatus = (maintenance: MaintenanceItem) => {
-    return maintenance.latestStatus || maintenance.currentStatusFromLog || maintenance.logs?.[0]?.status || maintenance.status;
+    return maintenance.status;
+  };
+
+  // Progresi alami status maintenance: Scheduled -> In Progress -> Completed.
+  // Completed adalah status akhir (tidak ada status berikutnya).
+  const getNextStatus = (currentStatus: string): string | null => {
+    if (currentStatus === 'Scheduled') return 'In Progress';
+    if (currentStatus === 'In Progress') return 'Completed';
+    return null;
   };
 
   const handleDeleteMaintenance = async (maintenance: MaintenanceItem) => {
@@ -351,15 +369,13 @@ export default function MaintenancePage() {
   };
 
   const handleLogCreated = async (updatedMaintenance: MaintenanceItem) => {
-    const normalizedMaintenance = withCurrentStatus(updatedMaintenance);
-
-    setSelectedMaintenance(normalizedMaintenance);
+    setSelectedMaintenance(updatedMaintenance);
     setMaintenances((current) =>
-      current.map((item) => item.id === normalizedMaintenance.id ? normalizedMaintenance : item)
+      current.map((item) => item.id === updatedMaintenance.id ? updatedMaintenance : item)
     );
     setIsAddLogOpen(false);
     const refreshedMaintenances = await fetchMaintenances();
-    const refreshedSelectedMaintenance = refreshedMaintenances.find((item) => item.id === normalizedMaintenance.id);
+    const refreshedSelectedMaintenance = refreshedMaintenances.find((item) => item.id === updatedMaintenance.id);
 
     if (refreshedSelectedMaintenance) {
       setSelectedMaintenance(refreshedSelectedMaintenance);
@@ -367,16 +383,14 @@ export default function MaintenancePage() {
   };
 
   const handleMaintenanceUpdated = async (updatedMaintenance: MaintenanceItem) => {
-    const normalizedMaintenance = withCurrentStatus(updatedMaintenance);
-
-    setSelectedMaintenance(normalizedMaintenance);
+    setSelectedMaintenance(updatedMaintenance);
     setMaintenances((current) =>
-      current.map((item) => item.id === normalizedMaintenance.id ? normalizedMaintenance : item)
+      current.map((item) => item.id === updatedMaintenance.id ? updatedMaintenance : item)
     );
     setIsEditOpen(false);
 
     const refreshedMaintenances = await fetchMaintenances();
-    const refreshedSelectedMaintenance = refreshedMaintenances.find((item) => item.id === normalizedMaintenance.id);
+    const refreshedSelectedMaintenance = refreshedMaintenances.find((item) => item.id === updatedMaintenance.id);
 
     if (refreshedSelectedMaintenance) {
       setSelectedMaintenance(refreshedSelectedMaintenance);
@@ -402,13 +416,13 @@ export default function MaintenancePage() {
             </div>
 
             <Tooltip content="Buat jadwal maintenance baru untuk aset" position="left">
-              <Link
+              <button
                 data-tour="schedule-btn"
-                href="/maintenance/add"
+                onClick={() => setAddOpen(true)}
                 className="bg-blue-600 hover:bg-blue-700 transition text-white px-5 py-3 rounded-xl font-medium shadow-lg shadow-blue-600/20 hover:-translate-y-0.5 active:translate-y-0"
               >
                 + Schedule
-              </Link>
+              </button>
             </Tooltip>
           </div>
 
@@ -451,6 +465,17 @@ export default function MaintenancePage() {
                   <option value="Medium">Medium</option>
                   <option value="High">High</option>
                   <option value="Critical">Critical</option>
+                </select>
+              </Tooltip>
+
+              <Tooltip content="Urutkan daftar maintenance" position="bottom">
+                <select
+                  data-tour="maintenance-sort"
+                  value={sortBy}
+                  onChange={(e) => handleSortChange(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-4 py-2.5 text-gray-600 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </Tooltip>
             </div>
@@ -497,7 +522,8 @@ export default function MaintenancePage() {
                         return (
                           <tr
                             key={item.id}
-                            className="stagger-item border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                            onClick={() => setSelectedMaintenance(item)}
+                            className="stagger-item border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer"
                             style={{ animationDelay: `${i * 35}ms` }}
                           >
                             <td className="py-5 font-medium text-gray-800">
@@ -532,7 +558,7 @@ export default function MaintenancePage() {
                               {latestPrediction ? `${latestPrediction.predicted_rul} bulan` : 'N/A'}
                             </td>
 
-                            <td>
+                            <td onClick={(e) => e.stopPropagation()}>
                               <Tooltip content="Lihat detail dan timeline maintenance" position="left">
                                 <button
                                   onClick={() => setSelectedMaintenance(item)}
@@ -548,33 +574,14 @@ export default function MaintenancePage() {
                     </tbody>
                   </table>
 
-                  <div className="flex items-center justify-between mt-6">
-                    <p className="text-sm text-gray-500">
-                      Showing {maintenances.length} of {pagination.total} items
-                    </p>
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setPage((current) => Math.max(1, current - 1))}
-                        disabled={pagination.page <= 1}
-                        className="px-4 h-9 rounded-lg border border-gray-200 text-gray-500 disabled:opacity-50"
-                      >
-                        Prev
-                      </button>
-
-                      <button className="min-w-9 h-9 rounded-lg bg-blue-600 text-white px-3">
-                        {pagination.page}
-                      </button>
-
-                      <button
-                        onClick={() => setPage((current) => Math.min(pagination.totalPages || 1, current + 1))}
-                        disabled={pagination.page >= pagination.totalPages}
-                        className="px-4 h-9 rounded-lg border border-gray-200 text-gray-500 disabled:opacity-50"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
+                  <PaginationBar
+                    page={pagination.page}
+                    totalPages={pagination.totalPages}
+                    total={pagination.total}
+                    limit={pagination.limit}
+                    itemLabel="maintenance"
+                    onPageChange={(p) => setPage(p)}
+                  />
                 </>
               )}
             </div>
@@ -585,6 +592,7 @@ export default function MaintenancePage() {
           <MaintenanceDetailModal
             maintenance={selectedMaintenance}
             getCurrentStatus={getCurrentStatus}
+            getNextStatus={getNextStatus}
             getSeverity={getSeverity}
             getStatus={getStatus}
             formatDate={formatDate}
@@ -598,6 +606,8 @@ export default function MaintenancePage() {
         {selectedMaintenance && isAddLogOpen && (
           <AddStatusLogModal
             maintenance={selectedMaintenance}
+            targetStatus={getNextStatus(getCurrentStatus(selectedMaintenance)) || 'Completed'}
+            formatCurrency={formatCurrency}
             onClose={() => setIsAddLogOpen(false)}
             onCreated={handleLogCreated}
           />
@@ -606,12 +616,31 @@ export default function MaintenancePage() {
         {selectedMaintenance && isEditOpen && (
           <EditMaintenanceModal
             maintenance={selectedMaintenance}
-            currentStatus={getCurrentStatus(selectedMaintenance)}
             onClose={() => setIsEditOpen(false)}
             onUpdated={handleMaintenanceUpdated}
           />
         )}
       </main>
+
+      <AddMaintenanceModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onSuccess={(result) => setScheduledResult(result)}
+      />
+
+      {scheduledResult && (
+        <MaintenanceScheduledModal
+          result={scheduledResult}
+          onAddAnother={() => {
+            setScheduledResult(null);
+            setAddOpen(true);
+          }}
+          onViewAll={() => {
+            setScheduledResult(null);
+            void fetchMaintenances();
+          }}
+        />
+      )}
     </ProtectedRoute>
   );
 }
@@ -619,6 +648,7 @@ export default function MaintenancePage() {
 function MaintenanceDetailModal({
   maintenance,
   getCurrentStatus,
+  getNextStatus,
   getSeverity,
   getStatus,
   formatDate,
@@ -629,6 +659,7 @@ function MaintenanceDetailModal({
 }: {
   maintenance: MaintenanceItem;
   getCurrentStatus: (maintenance: MaintenanceItem) => string;
+  getNextStatus: (currentStatus: string) => string | null;
   getSeverity: (severity: string) => string;
   getStatus: (status: string) => string;
   formatDate: (date?: string | null) => string;
@@ -640,38 +671,84 @@ function MaintenanceDetailModal({
   const latestPrediction = maintenance.prediction_history?.[0];
   const logs = maintenance.logs || [];
   const currentStatus = getCurrentStatus(maintenance);
+  const nextStatus = getNextStatus(currentStatus);
+
+  const [mode, setMode] = useState<'drawer' | 'modal'>('drawer');
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const handleClose = () => {
+    setVisible(false);
+    setTimeout(onClose, 220);
+  };
+
+  const isModal = mode === 'modal';
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-500/30 flex items-stretch sm:items-center justify-center sm:p-6">
-      <div className="bg-white w-full sm:max-w-3xl xl:max-w-6xl h-full sm:h-auto sm:max-h-[92vh] rounded-none sm:rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-        <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">
-              Maintenance Detail
-            </h2>
-            <p className="text-gray-500 mt-1">
-              {maintenance.asset?.asset_name || 'Unknown Asset'}
-            </p>
+    <div className="fixed inset-0 z-50">
+      {/* Backdrop */}
+      <div
+        onClick={handleClose}
+        className={`absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity duration-300 ${visible ? 'opacity-100' : 'opacity-0'}`}
+      />
+
+      {/* Positioner */}
+      <div
+        className={
+          isModal
+            ? 'absolute inset-0 flex items-center justify-center p-6'
+            : 'absolute inset-y-0 right-0 flex'
+        }
+      >
+        {/* Panel */}
+        <div
+          className={
+            isModal
+              ? `bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden transition-all duration-300 ${visible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`
+              : `bg-white shadow-2xl w-full max-w-xl h-full flex flex-col overflow-hidden transition-transform duration-300 ease-out ${visible ? 'translate-x-0' : 'translate-x-full'}`
+          }
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between gap-3 px-6 py-5 border-b border-gray-100 shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <Tooltip content={isModal ? 'Tampilkan sebagai panel samping' : 'Tampilkan sebagai jendela tengah'} position="bottom">
+                <button
+                  onClick={() => setMode(isModal ? 'drawer' : 'modal')}
+                  className="w-9 h-9 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-blue-600 flex items-center justify-center transition shrink-0"
+                  aria-label="Ubah tampilan panel detail"
+                >
+                  {isModal ? <PanelRight size={16} /> : <Maximize2 size={16} />}
+                </button>
+              </Tooltip>
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold text-gray-900 truncate">Maintenance Detail</h2>
+                <p className="text-gray-500 text-sm truncate">{maintenance.asset?.asset_name || 'Unknown Asset'}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getStatus(currentStatus)}`}>
+                {currentStatus}
+              </span>
+              <button
+                onClick={handleClose}
+                className="w-9 h-9 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400 transition"
+                aria-label="Tutup panel"
+              >
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatus(currentStatus)}`}>
-              {currentStatus}
-            </span>
-            <button
-              onClick={onClose}
-              className="w-10 h-10 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 transition"
-            >
-              x
-            </button>
-          </div>
-        </div>
-
-        <div className="overflow-y-auto p-6 bg-[#F5F7FB]">
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            <section className="bg-white rounded-2xl p-6 shadow-sm xl:col-span-1">
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto px-6 py-6 bg-[#F5F7FB] space-y-5">
+            <section className="bg-white rounded-2xl p-6 shadow-sm">
               <SectionTitle title="Asset Information" />
-              <div className="grid grid-cols-1 gap-5 mt-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-6">
                 <InfoItem label="Asset Name" value={maintenance.asset?.asset_name} />
                 <InfoItem label="Merk" value={maintenance.asset?.merk?.nama} />
                 <InfoItem label="Kategori" value={maintenance.asset?.kategori?.nama} />
@@ -682,9 +759,9 @@ function MaintenanceDetailModal({
               </div>
             </section>
 
-            <section className="bg-white rounded-2xl p-6 shadow-sm xl:col-span-2">
+            <section className="bg-white rounded-2xl p-6 shadow-sm">
               <SectionTitle title="Maintenance Information" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-6">
                 <InfoItem label="Maintenance Type" value={maintenance.maintenance_type} />
                 <InfoItem
                   label="Severity"
@@ -711,15 +788,15 @@ function MaintenanceDetailModal({
               </div>
             </section>
 
-            <section className="bg-white rounded-2xl p-6 shadow-sm xl:col-span-1">
+            <section className="bg-white rounded-2xl p-6 shadow-sm">
               <SectionTitle title="People" />
-              <div className="space-y-5 mt-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-6">
                 <PersonBlock title="Created By" user={maintenance.user} />
-                <PersonBlock title="Assigned Technician" user={maintenance.assignedTechnician} />
+                <TechnicianBlock technician={maintenance.technician} />
               </div>
             </section>
 
-            <section className="bg-white rounded-2xl p-6 shadow-sm xl:col-span-2">
+            <section className="bg-white rounded-2xl p-6 shadow-sm">
               <SectionTitle title="Maintenance Timeline" />
               {logs.length === 0 ? (
                 <div className="py-10 text-center text-gray-400">
@@ -734,7 +811,7 @@ function MaintenanceDetailModal({
                       )}
                       <div className="absolute left-0 top-1 w-4 h-4 rounded-full bg-blue-600 border-4 border-blue-100" />
                       <div className="border border-gray-100 rounded-2xl p-5 hover:bg-gray-50 transition">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                           <span className={`w-fit px-3 py-1 rounded-full text-sm font-medium ${getStatus(log.status)}`}>
                             {log.status}
                           </span>
@@ -747,7 +824,7 @@ function MaintenanceDetailModal({
                           {log.note || 'No note provided'}
                         </p>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
                           <InfoItem label="Technician" value={log.technician ? `${log.technician.name} (${log.technician.email})` : '-'} />
                           <InfoItem label="Created By" value={log.user ? `${log.user.name} (${log.user.email})` : '-'} />
                           <InfoItem label="Cost" value={formatCurrency(log.cost)} />
@@ -760,39 +837,42 @@ function MaintenanceDetailModal({
               )}
             </section>
           </div>
-        </div>
 
-        <div className="px-6 py-5 border-t border-gray-100 bg-white flex flex-col md:flex-row justify-end gap-3">
-          <Tooltip content="Ubah detail jadwal dan informasi maintenance" position="top">
+          {/* Footer */}
+          <div className="px-6 py-5 border-t border-gray-100 bg-white flex flex-col sm:flex-row justify-end gap-3 shrink-0">
+            <Tooltip content="Ubah detail jadwal dan informasi maintenance" position="top">
+              <button
+                onClick={() => onAction('Edit Maintenance', maintenance)}
+                className="px-5 py-2.5 rounded-xl border border-blue-600 text-blue-600 hover:bg-blue-50 transition font-medium text-sm"
+              >
+                Edit Maintenance
+              </button>
+            </Tooltip>
+            {nextStatus && (
+              <Tooltip content={`Tandai maintenance ini sebagai "${nextStatus}" dan catat ke timeline`} position="top">
+                <button
+                  onClick={onAddLog}
+                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 transition text-white font-medium text-sm"
+                >
+                  Eksekusi ke {nextStatus}
+                </button>
+              </Tooltip>
+            )}
+            <Tooltip content="Hapus record maintenance ini secara permanen" position="top">
+              <button
+                onClick={() => onAction('Delete Maintenance', maintenance)}
+                className="px-5 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 transition text-white font-medium text-sm"
+              >
+                Delete Maintenance
+              </button>
+            </Tooltip>
             <button
-              onClick={() => onAction('Edit Maintenance', maintenance)}
-              className="px-5 py-3 rounded-xl border border-blue-600 text-blue-600 hover:bg-blue-50 transition font-medium"
+              onClick={handleClose}
+              className="px-5 py-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition font-medium text-sm"
             >
-              Edit Maintenance
+              Tutup
             </button>
-          </Tooltip>
-          <Tooltip content="Tambahkan update status terbaru ke timeline" position="top">
-            <button
-              onClick={onAddLog}
-              className="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 transition text-white font-medium"
-            >
-              Add Status Log
-            </button>
-          </Tooltip>
-          <Tooltip content="Hapus record maintenance ini secara permanen" position="top">
-            <button
-              onClick={() => onAction('Delete Maintenance', maintenance)}
-              className="px-5 py-3 rounded-xl bg-red-500 hover:bg-red-600 transition text-white font-medium"
-            >
-              Delete Maintenance
-            </button>
-          </Tooltip>
-          <button
-            onClick={onClose}
-            className="px-5 py-3 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition font-medium"
-          >
-            Tutup
-          </button>
+          </div>
         </div>
       </div>
     </div>
@@ -801,54 +881,43 @@ function MaintenanceDetailModal({
 
 function EditMaintenanceModal({
   maintenance,
-  currentStatus,
   onClose,
   onUpdated,
 }: {
   maintenance: MaintenanceItem;
-  currentStatus: string;
   onClose: () => void;
   onUpdated: (maintenance: MaintenanceItem) => void;
 }) {
   const [assets, setAssets] = useState<AssetOption[]>([]);
+  const [technicians, setTechnicians] = useState<TechnicianOption[]>([]);
   const [assetError, setAssetError] = useState<string | null>(null);
   const [isLoadingAssets, setIsLoadingAssets] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     id_asset: maintenance.asset?.id || '',
-    assigned_technician_id: maintenance.assignedTechnician?.id || '',
+    id_teknisi: maintenance.technician?.id || '',
     maintenance_type: maintenance.maintenance_type || 'Preventive',
     severity: maintenance.severity || 'Medium',
-    status: currentStatus || maintenance.status || 'Scheduled',
-    scheduled_date: toDateTimeLocalValue(maintenance.scheduled_date),
-    start_date: toDateTimeLocalValue(maintenance.start_date),
-    completion_date: toDateTimeLocalValue(maintenance.completion_date),
     down_time: String(maintenance.down_time || 0),
     cost: String(maintenance.cost || 0),
-    note: '',
   });
 
   useEffect(() => {
     const controller = new AbortController();
+    const token = localStorage.getItem('kira_token');
 
     const fetchAssets = async () => {
       setIsLoadingAssets(true);
       setAssetError(null);
-
       try {
-        const token = localStorage.getItem('kira_token');
         const response = await fetch(`${API_URL}/api/assets`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
-
         if (!response.ok) {
           const err = await response.json().catch(() => null);
           throw new Error(err?.error || err?.details || 'Failed to fetch assets');
         }
-
         const result = await response.json();
         setAssets(result.data || []);
       } catch (fetchError) {
@@ -860,7 +929,21 @@ function EditMaintenanceModal({
       }
     };
 
+    const fetchTechnicians = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/technicians`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        if (response.ok) {
+          const result = await response.json();
+          setTechnicians(result.technicians || []);
+        }
+      } catch { /* non-fatal */ }
+    };
+
     fetchAssets();
+    fetchTechnicians();
 
     return () => controller.abort();
   }, []);
@@ -870,11 +953,11 @@ function EditMaintenanceModal({
   };
 
   const handleSubmit = async () => {
-    if (!formData.id_asset || !formData.scheduled_date) {
+    if (!formData.id_asset) {
       await Swal.fire({
         icon: 'warning',
         title: 'Perhatian',
-        text: 'Asset and scheduled date are required.',
+        text: 'Asset is required.',
         confirmButtonColor: '#2563eb',
       });
       return;
@@ -892,16 +975,11 @@ function EditMaintenanceModal({
         },
         body: JSON.stringify({
           id_asset: formData.id_asset,
-          assigned_technician_id: formData.assigned_technician_id || undefined,
+          id_teknisi: formData.id_teknisi || undefined,
           maintenance_type: formData.maintenance_type,
           severity: formData.severity,
-          status: formData.status,
-          scheduled_date: formData.scheduled_date,
-          start_date: formData.start_date || undefined,
-          completion_date: formData.completion_date || undefined,
           down_time: formData.down_time,
           cost: formData.cost,
-          note: formData.note || undefined,
         }),
       });
 
@@ -936,8 +1014,6 @@ function EditMaintenanceModal({
       setIsSubmitting(false);
     }
   };
-
-  const statusChanged = formData.status !== currentStatus;
 
   return (
     <div className="fixed inset-0 z-[60] bg-gray-500/30 flex items-center justify-center p-4">
@@ -990,31 +1066,33 @@ function EditMaintenanceModal({
                 )}
               </div>
 
-              <EditInput label="Assigned Technician ID" value={formData.assigned_technician_id} onChange={(value) => handleChange('assigned_technician_id', value)} />
+              <div>
+                <label className="text-sm font-medium text-gray-700">Teknisi</label>
+                <select
+                  value={formData.id_teknisi}
+                  onChange={(e) => handleChange('id_teknisi', e.target.value)}
+                  className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
+                >
+                  <option value="">— Pilih Teknisi —</option>
+                  {technicians.filter(t => t.status !== 'Tidak Aktif').map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} · {t.specialization}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <EditSelect label="Maintenance Type" value={formData.maintenance_type} options={['Preventive', 'Corrective', 'Predictive', 'Condition-Based']} onChange={(value) => handleChange('maintenance_type', value)} />
               <EditSelect label="Severity" value={formData.severity} options={['Low', 'Medium', 'High', 'Critical']} onChange={(value) => handleChange('severity', value)} />
-              <EditSelect label="Status" value={formData.status} options={['Scheduled', 'Assigned', 'In Progress', 'Completed', 'Cancelled']} onChange={(value) => handleChange('status', value)} />
-              <EditInput label="Scheduled Date" type="datetime-local" value={formData.scheduled_date} onChange={(value) => handleChange('scheduled_date', value)} />
-              <EditInput label="Start Date" type="datetime-local" value={formData.start_date} onChange={(value) => handleChange('start_date', value)} />
-              <EditInput label="Completion Date" type="datetime-local" value={formData.completion_date} onChange={(value) => handleChange('completion_date', value)} />
               <EditInput label="Downtime" type="number" value={formData.down_time} onChange={(value) => handleChange('down_time', value)} />
               <EditInput label="Cost" type="number" value={formData.cost} onChange={(value) => handleChange('cost', value)} />
-
-              {statusChanged && (
-                <div className="md:col-span-2">
-                  <label className="text-sm font-medium text-gray-700">
-                    Status Change Note
-                  </label>
-                  <textarea
-                    value={formData.note}
-                    onChange={(e) => handleChange('note', e.target.value)}
-                    rows={3}
-                    placeholder={`Optional note for ${currentStatus} to ${formData.status}`}
-                    className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 resize-none"
-                  />
-                </div>
-              )}
             </div>
+
+            <p className="mt-5 text-xs text-gray-400 flex items-start gap-1.5">
+              <svg className="w-3.5 h-3.5 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Status dan tanggal-tanggal (scheduled, start, completion) diambil otomatis dari riwayat status log — gunakan &quot;Add Status Log&quot; untuk mencatat atau mengubah status maintenance.
+            </p>
           </div>
         </div>
 
@@ -1041,20 +1119,57 @@ function EditMaintenanceModal({
 
 function AddStatusLogModal({
   maintenance,
+  targetStatus,
+  formatCurrency,
   onClose,
   onCreated,
 }: {
   maintenance: MaintenanceItem;
+  targetStatus: string;
+  formatCurrency: (value?: number) => string;
   onClose: () => void;
   onCreated: (maintenance: MaintenanceItem) => void;
 }) {
+  const [technicians, setTechnicians] = useState<TechnicianOption[]>([]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const token = localStorage.getItem('kira_token');
+
+    const fetchTechnicians = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/technicians`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        if (response.ok) {
+          const result = await response.json();
+          setTechnicians(result.technicians || []);
+        }
+      } catch { /* non-fatal */ }
+    };
+
+    fetchTechnicians();
+    return () => controller.abort();
+  }, []);
+
+  // Log paling baru pada riwayat maintenance ini — jadi acuan nilai default,
+  // sehingga pengguna tidak perlu mengisi ulang data yang sebenarnya tidak berubah.
+  const previousLog = useMemo(() => {
+    const sorted = [...(maintenance.logs || [])].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+    return sorted[sorted.length - 1] || null;
+  }, [maintenance.logs]);
+
+  const defaultTechnicianId =
+    previousLog?.technician?.id || maintenance.assignedTechnician?.id || maintenance.technician?.id || '';
+  const defaultCost = previousLog ? String(previousLog.cost ?? 0) : (maintenance.cost ? String(maintenance.cost) : '');
+
   const [formData, setFormData] = useState({
-    status: 'In Progress',
     note: '',
-    technician_id: maintenance.assignedTechnician?.id || '',
-    start_date: '',
-    completion_date: '',
-    cost: '',
+    technician_id: defaultTechnicianId,
+    cost: defaultCost,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -1063,11 +1178,11 @@ function AddStatusLogModal({
   };
 
   const handleSubmit = async () => {
-    if (!formData.status || !formData.note.trim()) {
+    if (!formData.note.trim()) {
       await Swal.fire({
         icon: 'warning',
         title: 'Perhatian',
-        text: 'Status dan note harus diisi.',
+        text: 'Catatan (note) harus diisi.',
         confirmButtonColor: '#2563eb',
       });
       return;
@@ -1084,11 +1199,9 @@ function AddStatusLogModal({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          status: formData.status,
+          status: targetStatus,
           note: formData.note,
           technician_id: formData.technician_id || undefined,
-          start_date: formData.start_date || undefined,
-          completion_date: formData.completion_date || undefined,
           cost: formData.cost || undefined,
         }),
       });
@@ -1102,7 +1215,7 @@ function AddStatusLogModal({
       await Swal.fire({
         icon: 'success',
         title: 'Berhasil!',
-        text: 'Status log berhasil ditambahkan.',
+        text: `Status maintenance berhasil diubah ke "${targetStatus}".`,
         confirmButtonColor: '#2563eb',
         timer: 1600,
         showConfirmButton: false,
@@ -1126,7 +1239,7 @@ function AddStatusLogModal({
         <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">
-              Add Status Log
+              Eksekusi ke {targetStatus}
             </h2>
             <p className="text-gray-500 mt-1">
               {maintenance.asset?.asset_name || 'Unknown Asset'}
@@ -1145,55 +1258,37 @@ function AddStatusLogModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>
                 <label className="text-sm font-medium text-gray-700">
-                  Status
+                  Status Baru
+                </label>
+                <div className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 bg-gray-50 text-gray-700 font-medium">
+                  {targetStatus}
+                </div>
+                <p className="text-xs text-gray-400 mt-1.5">
+                  Mengikuti progresi alami status maintenance, sehingga tidak bisa dipilih bebas.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-700">
+                  Teknisi Pelaksana
                 </label>
                 <select
-                  value={formData.status}
-                  onChange={(e) => handleChange('status', e.target.value)}
-                  className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
-                >
-                  <option value="Scheduled">Scheduled</option>
-                  <option value="Assigned">Assigned</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Completed">Completed</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Technician ID
-                </label>
-                <input
                   value={formData.technician_id}
                   onChange={(e) => handleChange('technician_id', e.target.value)}
-                  placeholder="Optional user id"
                   className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Start Date
-                </label>
-                <input
-                  type="datetime-local"
-                  value={formData.start_date}
-                  onChange={(e) => handleChange('start_date', e.target.value)}
-                  className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Completion Date
-                </label>
-                <input
-                  type="datetime-local"
-                  value={formData.completion_date}
-                  onChange={(e) => handleChange('completion_date', e.target.value)}
-                  className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
-                />
+                >
+                  <option value="">— Pilih Teknisi —</option>
+                  {technicians.filter((t) => t.status !== 'Tidak Aktif' || t.id === formData.technician_id).map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} · {t.specialization}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-1.5">
+                  {previousLog?.technician
+                    ? `Default mengikuti log sebelumnya: ${previousLog.technician.name}. Ubah jika ada pergantian teknisi.`
+                    : 'Pilih teknisi yang menangani progres ini (opsional).'}
+                </p>
               </div>
 
               <div>
@@ -1207,6 +1302,11 @@ function AddStatusLogModal({
                   placeholder="Optional"
                   className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
                 />
+                <p className="text-xs text-gray-400 mt-1.5">
+                  {previousLog
+                    ? `Default mengikuti log sebelumnya: ${formatCurrency(previousLog.cost)}. Ubah jika biaya berubah.`
+                    : 'Biarkan kosong jika belum ada biaya yang tercatat.'}
+                </p>
               </div>
 
               <div className="md:col-span-2">
@@ -1238,7 +1338,7 @@ function AddStatusLogModal({
             disabled={isSubmitting}
             className="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 transition text-white font-medium disabled:opacity-50"
           >
-            {isSubmitting ? 'Saving...' : 'Save Log'}
+            {isSubmitting ? 'Memproses...' : `Eksekusi ke ${targetStatus}`}
           </button>
         </div>
       </div>
@@ -1339,15 +1439,27 @@ function PersonBlock({
 }) {
   return (
     <div className="border border-gray-100 rounded-2xl p-5">
-      <p className="text-sm text-gray-400">
-        {title}
-      </p>
-      <p className="font-semibold text-gray-800 mt-2">
-        {user?.name || '-'}
-      </p>
-      <p className="text-sm text-gray-500 mt-1">
-        {user?.email || '-'}
-      </p>
+      <p className="text-sm text-gray-400">{title}</p>
+      <p className="font-semibold text-gray-800 mt-2">{user?.name || '-'}</p>
+      <p className="text-sm text-gray-500 mt-1">{user?.email || '-'}</p>
+    </div>
+  );
+}
+
+function TechnicianBlock({ technician }: { technician?: TechnicianOption | null }) {
+  return (
+    <div className="border border-gray-100 rounded-2xl p-5">
+      <p className="text-sm text-gray-400">Teknisi</p>
+      {technician ? (
+        <>
+          <p className="font-semibold text-gray-800 mt-2">{technician.name}</p>
+          <p className="text-sm text-blue-600 font-medium mt-0.5">{technician.specialization}</p>
+          <p className="text-sm text-gray-500 mt-0.5">{technician.email}</p>
+          {technician.phone && <p className="text-sm text-gray-500">{technician.phone}</p>}
+        </>
+      ) : (
+        <p className="font-semibold text-gray-400 mt-2">-</p>
+      )}
     </div>
   );
 }

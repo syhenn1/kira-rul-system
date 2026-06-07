@@ -13,6 +13,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import OnboardingModal from '@/components/OnboardingModal';
 import TourOverlay from '@/components/TourOverlay';
 import Tooltip from '@/components/Tooltip';
+import AssetDetailPanel from '@/components/AssetDetailPanel';
 import { authApi } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
 
@@ -39,8 +40,8 @@ const TOUR_STEPS = [
   },
   {
     target: 'upcoming-maintenance',
-    title: 'Upcoming Maintenance',
-    desc: 'Daftar jadwal maintenance yang akan segera jatuh tempo. Klik "Lihat Semua" untuk lihat semua jadwal.',
+    title: 'Maintenance Aktif Terbaru',
+    desc: 'Daftar maintenance yang masih berjalan atau menunggu, diurutkan dari yang terbaru dibuat. Klik "Lihat Semua" untuk lihat semua maintenance.',
   },
   {
     target: 'recent-activities',
@@ -71,7 +72,7 @@ type DashboardData = {
     maintenance_type: string;
     severity: string;
     status: string;
-    scheduled_date: string;
+    scheduled_date: string | null;
     cost: number;
     user_name: string;
   }[];
@@ -83,7 +84,8 @@ function statusCount(data: DashboardData | null, status: string) {
   return String(found?.count ?? 0);
 }
 
-function formatDate(d: string) {
+function formatDate(d: string | null) {
+  if (!d) return '-';
   return new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
@@ -95,6 +97,7 @@ const SEVERITY_CLASS: Record<string, string> = {
 
 export default function DashboardPage() {
   const [dashData, setDashData] = useState<DashboardData | null>(null);
+  const [detailAssetId, setDetailAssetId] = useState<string | null>(null);
 
   useEffect(() => {
     const token = authApi.getToken();
@@ -133,7 +136,7 @@ export default function DashboardPage() {
 
           {/* Summary */}
           <div className="mt-6 animate-[enterUp_0.5s_0.08s_ease-out_both]">
-            <SummaryCard />
+            <SummaryCard onSelectAsset={setDetailAssetId} />
           </div>
 
           {/* STAT CARDS */}
@@ -164,7 +167,7 @@ export default function DashboardPage() {
                 <StatCard
                   title="Perlu Perhatian"
                   value={dashData ? String(alerts.critical + alerts.high) : '—'}
-                  subtitle="RUL ≤ 12 Bulan"
+                  subtitle="RUL ≤ 365 Hari"
                 />
               </div>
             </Tooltip>
@@ -208,7 +211,7 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between">
                     <p className="text-gray-800 font-semibold text-sm">{alerts.critical} Aset Kritis</p>
                     <span className="bg-red-100 text-red-600 px-2.5 py-0.5 rounded-full text-xs font-medium">
-                      RUL ≤ 6 bln
+                      RUL ≤ 180 hari
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">Perlu penanganan segera</p>
@@ -217,7 +220,7 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between">
                     <p className="text-gray-800 font-semibold text-sm">{alerts.high} Prioritas Tinggi</p>
                     <span className="bg-orange-100 text-orange-600 px-2.5 py-0.5 rounded-full text-xs font-medium">
-                      RUL ≤ 12 bln
+                      RUL ≤ 365 hari
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">Rencanakan maintenance</p>
@@ -226,7 +229,7 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between">
                     <p className="text-gray-800 font-semibold text-sm">{alerts.watch} Perlu Dipantau</p>
                     <span className="bg-yellow-100 text-yellow-700 px-2.5 py-0.5 rounded-full text-xs font-medium">
-                      RUL ≤ 24 bln
+                      RUL ≤ 730 hari
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">Pantau berkala</p>
@@ -252,8 +255,8 @@ export default function DashboardPage() {
               data-tour="upcoming-maintenance"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-gray-800">Upcoming Maintenance</h2>
-                <Tooltip content="Lihat semua jadwal maintenance yang akan datang">
+                <h2 className="text-xl font-semibold text-gray-800">Maintenance Aktif Terbaru</h2>
+                <Tooltip content="Lihat maintenance yang masih berjalan atau menunggu">
                   <Link href="/maintenance" className="text-blue-600 hover:text-blue-700 font-medium transition text-sm">
                     Lihat Semua
                   </Link>
@@ -262,7 +265,7 @@ export default function DashboardPage() {
 
               <div className="space-y-4">
                 {dashData?.upcoming_maintenances.length === 0 && (
-                  <p className="text-sm text-gray-400 text-center py-6">Tidak ada jadwal mendatang.</p>
+                  <p className="text-sm text-gray-400 text-center py-6">Tidak ada maintenance aktif saat ini.</p>
                 )}
                 {dashData?.upcoming_maintenances.slice(0, 3).map((m) => (
                   <div key={m.id}>
@@ -309,6 +312,8 @@ export default function DashboardPage() {
             <RecentActivities />
           </div>
         </div>
+
+        <AssetDetailPanel assetId={detailAssetId} onClose={() => setDetailAssetId(null)} />
       </main>
     </ProtectedRoute>
   );

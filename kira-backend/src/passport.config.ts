@@ -1,11 +1,6 @@
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
-import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { Pool } from 'pg';
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
+import prisma from './lib/prisma';
 
 passport.use(
   new GoogleStrategy(
@@ -41,6 +36,14 @@ passport.use(
               profile_picture: profile.photos?.[0]?.value,
             },
           });
+
+          // Auto-join the first company if one exists (single-tenant setup)
+          const company = await prisma.company.findFirst();
+          if (company) {
+            await prisma.companyMember.create({
+              data: { id_user: user.id, id_perusahaan: company.id, role: 'Member' },
+            });
+          }
         }
 
         return done(null, user);
