@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { authApi } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 
@@ -12,9 +11,10 @@ const LOADING_STATES = [
   'Generating insights...',
 ];
 
-export default function SummaryCard() {
+export default function SummaryCard({ onSelectAsset }: { onSelectAsset?: (assetId: string) => void }) {
   const [summary, setSummary] = useState<string>('');
   const [assets, setAssets] = useState<{ id: string, name: string, brand: string, category: string, status: string, pred_rul: number | null }[]>([]);
+  const [criticalCount, setCriticalCount] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingStep, setLoadingStep] = useState(0);
@@ -55,6 +55,7 @@ export default function SummaryCard() {
         const data = await response.json();
         setSummary(data.summary || 'Tidak ada ringkasan yang tersedia.');
         setAssets(data.assets || []);
+        setCriticalCount(typeof data.critical_count === 'number' ? data.critical_count : 0);
       } catch (fetchError) {
         if ((fetchError as Error).name !== 'AbortError') {
           setError('Tidak dapat memuat ringkasan. Cek backend atau AI engine.');
@@ -74,7 +75,7 @@ export default function SummaryCard() {
   }, []);
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl p-6 shadow-lg transition-all duration-500 
+    <div className={`relative overflow-hidden rounded-2xl p-6 shadow-lg transition-all duration-500
       ${isLoading ? 'bg-white' : 'bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 text-white'}`}
     >
       {/* Decorative background shapes */}
@@ -136,20 +137,20 @@ export default function SummaryCard() {
 
             {(() => {
               const criticalAssets = assets.filter((a) => a.pred_rul != null && a.pred_rul <= 180);
-              return criticalAssets.length > 0 ? (
+              return criticalCount > 0 ? (
                 <div className="mt-6 pt-5 border-t border-white/10">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse shrink-0"></span>
                     <h3 className="text-xs font-semibold text-red-300 uppercase tracking-wider">
-                      Aset Kritis — Segera Ditangani ({criticalAssets.length})
+                      Aset Kritis — Segera Ditangani ({criticalCount})
                     </h3>
                   </div>
                   <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
                     {criticalAssets.slice(0, 5).map((asset) => (
-                      <Link
+                      <button
                         key={asset.id}
-                        href={`/assets/${asset.id}`}
-                        className="group shrink-0 w-48 flex flex-col p-3 rounded-xl bg-red-500/20 text-white border border-red-400/40 hover:bg-red-500/30 transition-all duration-300 shadow-sm backdrop-blur-md"
+                        onClick={() => onSelectAsset?.(asset.id)}
+                        className="group shrink-0 w-48 flex flex-col p-3 rounded-xl bg-red-500/20 text-white border border-red-400/40 hover:bg-red-500/30 transition-all duration-300 shadow-sm backdrop-blur-md text-left"
                       >
                         <div className="flex items-center gap-2 mb-2">
                           <div className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center text-red-600 shrink-0">
@@ -166,7 +167,7 @@ export default function SummaryCard() {
                             {asset.pred_rul} hari
                           </span>
                         </div>
-                      </Link>
+                      </button>
                     ))}
                   </div>
                 </div>

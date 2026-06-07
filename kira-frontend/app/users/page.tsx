@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react';
 import { Search, Filter } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
+import Pagination from '@/components/Pagination';
 import Tooltip from '@/components/Tooltip';
 import TourOverlay from '@/components/TourOverlay';
+import TechnicianDetailPanel from '@/components/TechnicianDetailPanel';
 import { authApi } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
 
@@ -53,6 +55,13 @@ const SPECIALIZATIONS = [
   'IT & Jaringan', 'Plumbing', 'Proteksi Kebakaran', 'Instrumentasi',
 ];
 
+const SORT_OPTIONS = [
+  { value: 'name_asc',  label: 'Nama A–Z' },
+  { value: 'name_desc', label: 'Nama Z–A' },
+  { value: 'exp_desc',  label: 'Pengalaman Terbanyak' },
+  { value: 'exp_asc',   label: 'Pengalaman Tersedikit' },
+];
+
 const PAGE_SIZE = 15;
 
 function initials(name: string) {
@@ -73,8 +82,10 @@ export default function TeknisiPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Semua');
   const [specFilter, setSpecFilter] = useState('Semua');
+  const [sortBy, setSortBy] = useState('name_asc');
   const [page, setPage] = useState(1);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [detailTechnician, setDetailTechnician] = useState<Technician | null>(null);
 
   const fetchTechnicians = async () => {
     const token = authApi.getToken();
@@ -111,8 +122,18 @@ export default function TeknisiPage() {
     return matchSearch && matchStatus && matchSpec;
   });
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const sorted = [...filtered].sort((a, b) => {
+    switch (sortBy) {
+      case 'name_desc': return b.name.localeCompare(a.name);
+      case 'exp_desc':  return b.experience_years - a.experience_years;
+      case 'exp_asc':   return a.experience_years - b.experience_years;
+      case 'name_asc':
+      default:          return a.name.localeCompare(b.name);
+    }
+  });
+
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  const paginated = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const counts = {
     tersedia: technicians.filter((t) => t.status === 'Tersedia').length,
@@ -187,6 +208,16 @@ export default function TeknisiPage() {
                 {SPECIALIZATIONS.map((s) => <option key={s}>{s}</option>)}
               </select>
             </Tooltip>
+
+            <Tooltip content="Urutkan daftar teknisi" position="bottom">
+              <select
+                value={sortBy}
+                onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+                className="text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 outline-none focus:ring-2 focus:ring-blue-400"
+              >
+                {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </Tooltip>
           </div>
         </div>
 
@@ -228,7 +259,8 @@ export default function TeknisiPage() {
                 {paginated.map((t, i) => (
                   <tr
                     key={t.id}
-                    className="stagger-item border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                    onClick={() => setDetailTechnician(t)}
+                    className="stagger-item border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer"
                     style={{ animationDelay: `${i * 30}ms` }}
                   >
                     <td className="px-6 py-4">
@@ -259,7 +291,7 @@ export default function TeknisiPage() {
                       </span>
                     </td>
 
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                       <Tooltip content="Ubah status ketersediaan teknisi" position="left">
                         <select
                           value={t.status}
@@ -280,30 +312,27 @@ export default function TeknisiPage() {
           </div>
 
           {/* Pagination */}
-          {!loading && totalPages > 1 && (
-            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
-              <p className="text-xs text-gray-400">
-                {filtered.length} teknisi · halaman {page} dari {totalPages}
-              </p>
-              <div className="flex gap-1.5">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setPage(p)}
-                    className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
-                      p === page
-                        ? 'bg-blue-600 text-white'
-                        : 'border border-gray-200 text-gray-500 hover:bg-gray-50'
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-            </div>
+          {!loading && (
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={sorted.length}
+              limit={PAGE_SIZE}
+              itemLabel="teknisi"
+              onPageChange={setPage}
+            />
           )}
         </div>
       </div>
+
+      <TechnicianDetailPanel
+        technician={detailTechnician}
+        onClose={() => setDetailTechnician(null)}
+        onUpdated={(updated) => {
+          setTechnicians((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+          setDetailTechnician(updated);
+        }}
+      />
     </main>
   );
 }

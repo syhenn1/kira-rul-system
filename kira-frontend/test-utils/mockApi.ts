@@ -11,7 +11,7 @@ export function jsonResponse(body: unknown, init: { ok?: boolean; status?: numbe
     status,
     json: async () => body,
     text: async () => JSON.stringify(body),
-  } as Response;
+  } as unknown as Response;
 }
 
 export function textResponse(text: string, init: { ok?: boolean; status?: number } = {}) {
@@ -22,5 +22,5 @@ export function textResponse(text: string, init: { ok?: boolean; status?: number
     status,
     json: async () => { throw new Error('not json'); },
     text: async () => text,
-  } as Response;
+  } as unknown as Response;
 }

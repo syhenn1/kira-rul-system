@@ -45,6 +45,23 @@ const GEDUNG_COLORS: Record<string, string> = {
   UTAMA:  'bg-cyan-100 text-cyan-700',
 };
 
+const SORT_OPTIONS = [
+  { value: 'name_asc',  label: 'Nama A–Z' },
+  { value: 'name_desc', label: 'Nama Z–A' },
+  { value: 'kode_asc',  label: 'Kode A–Z' },
+  { value: 'kode_desc', label: 'Kode Z–A' },
+];
+
+const CATEGORY_OPTIONS = [
+  { value: 'Semua', label: 'Semua Kategori' },
+  { value: 'Utama', label: 'Gedung Utama' },
+  { value: 'Penunjang', label: 'Area Penunjang' },
+];
+
+function isPenunjang(kode: string) {
+  return kode === 'PARKIR' || kode === 'SERVIS';
+}
+
 function getColor(kode: string) {
   if (GEDUNG_COLORS[kode]) return GEDUNG_COLORS[kode];
   const seed = kode.charCodeAt(0) % 5;
@@ -62,6 +79,8 @@ export default function GedungPage() {
   const [gedungList, setGedungList] = useState<Gedung[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('Semua');
+  const [sortBy, setSortBy] = useState('name_asc');
   const [showForm, setShowForm] = useState(false);
   const [editTarget, setEditTarget] = useState<Gedung | null>(null);
   const [form, setForm] = useState({ nama: '', kode: '' });
@@ -145,11 +164,27 @@ export default function GedungPage() {
     }
   };
 
-  const filtered = gedungList.filter(
+  const searched = gedungList.filter(
     (g) =>
       g.nama.toLowerCase().includes(search.toLowerCase()) ||
       g.kode.toLowerCase().includes(search.toLowerCase())
   );
+
+  const byCategory = searched.filter((g) => {
+    if (categoryFilter === 'Utama') return !isPenunjang(g.kode);
+    if (categoryFilter === 'Penunjang') return isPenunjang(g.kode);
+    return true;
+  });
+
+  const filtered = [...byCategory].sort((a, b) => {
+    switch (sortBy) {
+      case 'name_desc': return b.nama.localeCompare(a.nama);
+      case 'kode_asc':  return a.kode.localeCompare(b.kode);
+      case 'kode_desc': return b.kode.localeCompare(a.kode);
+      case 'name_asc':
+      default:          return a.nama.localeCompare(b.nama);
+    }
+  });
 
   return (
     <ProtectedRoute>
@@ -202,9 +237,9 @@ export default function GedungPage() {
             </div>
           </div>
 
-          {/* Search bar */}
-          <div className="bg-white rounded-2xl px-5 py-4 shadow-sm mt-4 animate-[enterUp_0.5s_0.14s_ease-out_both]">
-            <div className="relative">
+          {/* Search & filter bar */}
+          <div className="bg-white rounded-2xl px-5 py-4 shadow-sm mt-4 flex flex-col lg:flex-row gap-3 animate-[enterUp_0.5s_0.14s_ease-out_both]">
+            <div className="relative flex-1">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <Tooltip content="Cari gedung berdasarkan nama atau kode" position="bottom">
                 <input
@@ -217,6 +252,26 @@ export default function GedungPage() {
                 />
               </Tooltip>
             </div>
+
+            <Tooltip content="Filter berdasarkan kategori gedung" position="bottom">
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+              >
+                {CATEGORY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </Tooltip>
+
+            <Tooltip content="Urutkan daftar gedung" position="bottom">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+              >
+                {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </Tooltip>
           </div>
 
           {/* Grid */}
@@ -237,7 +292,8 @@ export default function GedungPage() {
                   return (
                     <div
                       key={g.id}
-                      className="stagger-item bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col items-center gap-4 group relative hover:shadow-md transition-all duration-300 hover:-translate-y-0.5"
+                      onClick={() => openEdit(g)}
+                      className="stagger-item bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col items-center gap-4 group relative hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 cursor-pointer"
                       style={{ animationDelay: `${i * 40}ms` }}
                     >
                       <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${color}`}>
@@ -249,7 +305,10 @@ export default function GedungPage() {
                         <p className="text-xs text-gray-400 mt-0.5">Kode: {g.kode}</p>
                       </div>
 
-                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <div
+                        className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <Tooltip content="Edit gedung ini" position="top">
                           <button
                             onClick={() => openEdit(g)}

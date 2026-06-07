@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Swal from 'sweetalert2';
@@ -9,8 +8,10 @@ import Sidebar from '@/components/Sidebar';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import AddAssetModal from '@/components/AddAssetModal';
 import AssetAddedModal, { type AssetAddedResult } from '@/components/AssetAddedModal';
+import AssetDetailPanel from '@/components/AssetDetailPanel';
 import Tooltip from '@/components/Tooltip';
 import TourOverlay from '@/components/TourOverlay';
+import Pagination from '@/components/Pagination';
 import { apiFetch } from '@/lib/api';
 import { authApi } from '@/lib/auth';
 
@@ -103,6 +104,7 @@ export default function AssetsPage() {
   const [assetResult, setAssetResult] = useState<AssetAddedResult | null>(null);
   const [assetImage, setAssetImage] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [detailAssetId, setDetailAssetId] = useState<string | null>(null);
   const [categories, setCategories] = useState<LookupItem[]>([]);
   const [gedungs, setGedungs] = useState<GedungItem[]>([]);
 
@@ -203,6 +205,11 @@ export default function AssetsPage() {
     setCurrentPage(1);
   };
 
+  const refreshAssets = () => {
+    const f = filterRef.current;
+    fetchAssets(currentPage, f.search, f.statusFilter, f.sortBy, f.rulMin, f.rulMax, f.categoryFilter, f.criticalityFilter, f.gedungFilter);
+  };
+
   const handleDelete = async (asset: Asset) => {
     const result = await Swal.fire({
       title: 'Hapus Aset?',
@@ -227,8 +234,7 @@ export default function AssetsPage() {
         throw new Error(err.error || 'Gagal menghapus aset');
       }
       await Swal.fire({ title: 'Dihapus!', text: 'Aset berhasil dihapus.', icon: 'success', confirmButtonColor: '#2563eb' });
-      const f = filterRef.current;
-      fetchAssets(currentPage, f.search, f.statusFilter, f.sortBy, f.rulMin, f.rulMax, f.categoryFilter, f.criticalityFilter, f.gedungFilter);
+      refreshAssets();
     } catch (err) {
       Swal.fire({ title: 'Gagal', text: (err as Error).message, icon: 'error', confirmButtonColor: '#ef4444' });
     }
@@ -502,13 +508,17 @@ export default function AssetsPage() {
                     return (
                       <tr
                         key={asset.id}
-                        className="stagger-item border-b hover:bg-gray-50 transition"
+                        onClick={() => setDetailAssetId(asset.id)}
+                        className="stagger-item border-b hover:bg-gray-50 transition cursor-pointer"
                         style={{ animationDelay: `${i * 40}ms` }}
                       >
                         <td className="px-6 py-5 font-semibold text-[#111827]">
-                          <Link href={`/assets/${asset.id}`} className="hover:text-blue-600 transition">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDetailAssetId(asset.id); }}
+                            className="hover:text-blue-600 transition text-left"
+                          >
                             {asset.asset_name}
-                          </Link>
+                          </button>
                           <p className="text-xs text-gray-400 font-normal mt-0.5">{asset.brand}</p>
                         </td>
                         <td className="px-6 py-5 text-gray-600">
@@ -533,17 +543,15 @@ export default function AssetsPage() {
                           )}
                         </td>
                         <td className="px-6 py-5 text-gray-500 text-sm">{formatDate(asset.last_action)}</td>
-                        <td className="px-6 py-5">
+                        <td className="px-6 py-5" onClick={(e) => e.stopPropagation()}>
                           <div className="flex gap-3">
-                            <Tooltip content="Lihat detail aset" position="top">
-                              <Link href={`/assets/${asset.id}`} className="text-blue-600 hover:text-blue-700 font-medium transition">
+                            <Tooltip content="Lihat & ubah detail aset" position="top">
+                              <button
+                                onClick={() => setDetailAssetId(asset.id)}
+                                className="text-blue-600 hover:text-blue-700 font-medium transition"
+                              >
                                 View
-                              </Link>
-                            </Tooltip>
-                            <Tooltip content="Edit aset" position="top">
-                              <Link href={`/assets/${asset.id}/edit`} className="text-gray-500 hover:text-gray-700 font-medium transition">
-                                Edit
-                              </Link>
+                              </button>
                             </Tooltip>
                             <Tooltip content="Hapus aset dari sistem" position="top">
                               <button
@@ -564,28 +572,14 @@ export default function AssetsPage() {
           </div>
 
           {/* PAGINATION */}
-          <div className="flex items-center justify-between px-6 py-5">
-            <p className="text-gray-500 text-sm">
-              {pagination.total === 0
-                ? 'Tidak ada data'
-                : `Menampilkan ${(pagination.page - 1) * pagination.limit + 1}–${Math.min(pagination.page * pagination.limit, pagination.total)} dari ${pagination.total} aset`}
-            </p>
-            <div className="flex gap-2">
-              {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setCurrentPage(p)}
-                  className={`w-10 h-10 rounded-xl text-sm font-medium transition ${
-                    p === pagination.page
-                      ? 'bg-blue-600 text-white'
-                      : 'border hover:bg-gray-50 text-gray-600'
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            limit={pagination.limit}
+            itemLabel="aset"
+            onPageChange={setCurrentPage}
+          />
         </div>
       </main>
 
@@ -614,6 +608,12 @@ export default function AssetsPage() {
           }}
         />
       )}
+
+      <AssetDetailPanel
+        assetId={detailAssetId}
+        onClose={() => setDetailAssetId(null)}
+        onSaved={refreshAssets}
+      />
     </ProtectedRoute>
   );
 }

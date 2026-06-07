@@ -52,9 +52,9 @@ _SQL = """
 WITH maint_intervals AS (
     SELECT
         id_asset,
-        scheduled_date,
-        LAG(scheduled_date) OVER (
-            PARTITION BY id_asset ORDER BY scheduled_date
+        created_at,
+        LAG(created_at) OVER (
+            PARTITION BY id_asset ORDER BY created_at
         ) AS prev_date
     FROM maintenances
 ),
@@ -62,7 +62,7 @@ maint_stats AS (
     SELECT
         id_asset,
         AVG(
-            EXTRACT(EPOCH FROM (scheduled_date - prev_date)) / 86400.0
+            EXTRACT(EPOCH FROM (created_at - prev_date)) / 86400.0
         ) AS avg_interval
     FROM maint_intervals
     WHERE prev_date IS NOT NULL

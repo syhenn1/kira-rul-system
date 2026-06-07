@@ -717,6 +717,7 @@ def summarize(req: SummarizeRequest):
                 "company_id": req.company_id,
                 "summary": summary["summary"],
                 "assets": summary.get("assets", []),
+                "critical_count": summary.get("critical_count", 0),
             }
         return {"company_id": req.company_id, "summary": summary}
     except Exception as e:

@@ -22,9 +22,7 @@ model User {
   ownedCompanies       Company[]        @relation("CompanyOwner")
   memberships          CompanyMember[]
   maintenances         Maintenance[]    // sebagai pembuat / id_user
-  assignedMaintenances Maintenance[]    @relation("AssignedTechnician") // assigned_technician_id
   createdLogs          MaintenanceLog[] @relation("MaintenanceLogCreator")
-  technicianLogs       MaintenanceLog[] @relation("MaintenanceLogTechnician")
 
   @@map("users")
 }
@@ -138,24 +136,21 @@ model Maintenance {
   id                     String    @id @default(uuid())
   id_asset               String
   id_user                String
-  id_teknisi             String?   // FK ke tabel technicians
-  assigned_technician_id String?   // FK ke tabel users (legacy)
+  id_teknisi             String?   // FK ke tabel technicians (teknisi yang ditugaskan)
+  assigned_technician_id String?   // FK ke tabel technicians (teknisi pelaksana terbaru, dicatat dari status log)
   maintenance_type       String
   severity               String    // Low, Medium, High, Critical
-  scheduled_date         DateTime
-  start_date             DateTime?
-  completion_date        DateTime?
   down_time              Int       @default(0)
   cost                   Float     @default(0.0)
-  status                 String    // Scheduled, In Progress, Completed
   jenis_kerusakan        String?
   penyebab               String?
   spare_part_digunakan   String?
+  created_at             DateTime  @default(now())
 
   asset              Asset                    @relation(fields: [id_asset], references: [id])
   user               User                     @relation(fields: [id_user], references: [id])
-  assignedTechnician User?                    @relation("AssignedTechnician", fields: [assigned_technician_id], references: [id])
-  technician         Technician?              @relation(fields: [id_teknisi], references: [id])
+  assignedTechnician Technician?              @relation("AssignedTechnician", fields: [assigned_technician_id], references: [id])
+  technician         Technician?              @relation("MaintenanceTechnician", fields: [id_teknisi], references: [id])
   logs               MaintenanceLog[]
   prediction_history AssetPredictionHistory[]
 
@@ -163,21 +158,19 @@ model Maintenance {
 }
 
 model MaintenanceLog {
-  id              String    @id @default(uuid())
-  id_maintenance  String
-  id_user         String
-  technician_id   String?
-  status          String
-  note            String
-  start_date      DateTime?
-  completion_date DateTime?
-  down_time       Int       @default(0)
-  cost            Float     @default(0.0)
-  created_at      DateTime  @default(now())
+  id             String   @id @default(uuid())
+  id_maintenance String
+  id_user        String
+  technician_id  String?
+  status         String
+  note           String
+  down_time      Int      @default(0)
+  cost           Float    @default(0.0)
+  created_at     DateTime @default(now())
 
   maintenance Maintenance @relation(fields: [id_maintenance], references: [id])
   user        User        @relation("MaintenanceLogCreator", fields: [id_user], references: [id])
-  technician  User?       @relation("MaintenanceLogTechnician", fields: [technician_id], references: [id])
+  technician  Technician? @relation("MaintenanceLogTechnician", fields: [technician_id], references: [id])
 
   @@map("maintenance_logs")
 }
@@ -193,8 +186,10 @@ model Technician {
   experience_years Int      @default(0)
   created_at       DateTime @default(now())
 
-  company      Company       @relation(fields: [id_perusahaan], references: [id])
-  maintenances Maintenance[]
+  company              Company          @relation(fields: [id_perusahaan], references: [id])
+  maintenances         Maintenance[]    @relation("MaintenanceTechnician")
+  assignedMaintenances Maintenance[]    @relation("AssignedTechnician")
+  logs                 MaintenanceLog[] @relation("MaintenanceLogTechnician")
 
   @@map("technicians")
 }

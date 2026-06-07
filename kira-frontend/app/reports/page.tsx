@@ -4,9 +4,11 @@ import { useEffect, useState, useMemo } from 'react';
 import { Download, Search, Filter, FileText, Wrench, TrendingDown } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
+import Pagination from '@/components/Pagination';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Tooltip from '@/components/Tooltip';
 import TourOverlay from '@/components/TourOverlay';
+import AssetDetailPanel from '@/components/AssetDetailPanel';
 import { authApi } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
 
@@ -57,7 +59,7 @@ type MaintenanceRow = {
   maintenance_type: string;
   severity: string;
   status: string;
-  scheduled_date: string;
+  scheduled_date: string | null;
   completion_date: string | null;
   cost: number;
   down_time: number;
@@ -66,10 +68,29 @@ type MaintenanceRow = {
 
 const PAGE_SIZE = 15;
 
+const ASSET_SORT_OPTIONS = [
+  { value: 'rul_asc',   label: 'RUL Terendah' },
+  { value: 'rul_desc',  label: 'RUL Tertinggi' },
+  { value: 'name_asc',  label: 'Nama A–Z' },
+  { value: 'name_desc', label: 'Nama Z–A' },
+  { value: 'cost_desc', label: 'Total Biaya Tertinggi' },
+  { value: 'cost_asc',  label: 'Total Biaya Terendah' },
+];
+
+const MAINTENANCE_SORT_OPTIONS = [
+  { value: 'date_desc', label: 'Terbaru' },
+  { value: 'date_asc',  label: 'Terlama' },
+  { value: 'name_asc',  label: 'Nama Aset A–Z' },
+  { value: 'name_desc', label: 'Nama Aset Z–A' },
+  { value: 'cost_desc', label: 'Biaya Tertinggi' },
+  { value: 'cost_asc',  label: 'Biaya Terendah' },
+];
+
+// predicted_rul disimpan dalam satuan HARI (konsisten dengan Alerts/Dashboard — threshold 180/365/730)
 const RUL_BADGE = (rul: number) => {
-  if (rul <= 6) return 'bg-red-100 text-red-600';
-  if (rul <= 12) return 'bg-orange-100 text-orange-600';
-  if (rul <= 24) return 'bg-yellow-100 text-yellow-700';
+  if (rul <= 180) return 'bg-red-100 text-red-600';
+  if (rul <= 365) return 'bg-orange-100 text-orange-600';
+  if (rul <= 730) return 'bg-yellow-100 text-yellow-700';
   return 'bg-green-100 text-green-700';
 };
 
@@ -114,7 +135,10 @@ export default function ReportsPage() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('Semua');
   const [statusFilter, setStatusFilter] = useState('Semua');
+  const [assetSortBy, setAssetSortBy] = useState('rul_asc');
+  const [maintenanceSortBy, setMaintenanceSortBy] = useState('date_desc');
   const [page, setPage] = useState(1);
+  const [detailAssetId, setDetailAssetId] = useState<string | null>(null);
 
   useEffect(() => {
     const token = authApi.getToken();
@@ -146,7 +170,7 @@ export default function ReportsPage() {
 
   const filteredAssets = useMemo(() => {
     const q = search.toLowerCase();
-    return assetRows.filter((r) => {
+    const result = assetRows.filter((r) => {
       const matchSearch =
         r.asset_name.toLowerCase().includes(q) ||
         (r.merk_nama ?? '').toLowerCase().includes(q) ||
@@ -154,11 +178,22 @@ export default function ReportsPage() {
       const matchCat = categoryFilter === 'Semua' || (r.kategori_nama ?? 'Tidak Diketahui') === categoryFilter;
       return matchSearch && matchCat;
     });
-  }, [assetRows, search, categoryFilter]);
+    return [...result].sort((a, b) => {
+      switch (assetSortBy) {
+        case 'rul_desc':  return b.predicted_rul - a.predicted_rul;
+        case 'name_asc':  return a.asset_name.localeCompare(b.asset_name);
+        case 'name_desc': return b.asset_name.localeCompare(a.asset_name);
+        case 'cost_desc': return b.total_cost - a.total_cost;
+        case 'cost_asc':  return a.total_cost - b.total_cost;
+        case 'rul_asc':
+        default:          return a.predicted_rul - b.predicted_rul;
+      }
+    });
+  }, [assetRows, search, categoryFilter, assetSortBy]);
 
   const filteredMaintenance = useMemo(() => {
     const q = search.toLowerCase();
-    return maintenanceRows.filter((r) => {
+    const result = maintenanceRows.filter((r) => {
       const matchSearch =
         r.asset_name.toLowerCase().includes(q) ||
         r.maintenance_type.toLowerCase().includes(q) ||
@@ -166,7 +201,18 @@ export default function ReportsPage() {
       const matchStatus = statusFilter === 'Semua' || r.status === statusFilter;
       return matchSearch && matchStatus;
     });
-  }, [maintenanceRows, search, statusFilter]);
+    return [...result].sort((a, b) => {
+      switch (maintenanceSortBy) {
+        case 'date_asc':  return new Date(a.scheduled_date ?? 0).getTime() - new Date(b.scheduled_date ?? 0).getTime();
+        case 'name_asc':  return a.asset_name.localeCompare(b.asset_name);
+        case 'name_desc': return b.asset_name.localeCompare(a.asset_name);
+        case 'cost_desc': return b.cost - a.cost;
+        case 'cost_asc':  return a.cost - b.cost;
+        case 'date_desc':
+        default:          return new Date(b.scheduled_date ?? 0).getTime() - new Date(a.scheduled_date ?? 0).getTime();
+      }
+    });
+  }, [maintenanceRows, search, statusFilter, maintenanceSortBy]);
 
   const activeData = tab === 'assets' ? filteredAssets : filteredMaintenance;
   const totalPages = Math.ceil(activeData.length / PAGE_SIZE);
@@ -175,7 +221,7 @@ export default function ReportsPage() {
   const handleExport = () => {
     if (tab === 'assets') {
       exportCSV('laporan-aset.csv',
-        ['Nama Aset', 'Merk', 'Kategori', 'Sub Kategori', 'Tipe', 'Status', 'Kekritisan', 'RUL (bln)', 'Jml Maintenance', 'Total Biaya', 'Tgl Pembelian'],
+        ['Nama Aset', 'Merk', 'Kategori', 'Sub Kategori', 'Tipe', 'Status', 'Kekritisan', 'RUL (hari)', 'Jml Maintenance', 'Total Biaya', 'Tgl Pembelian'],
         filteredAssets.map((r) => [r.asset_name, r.merk_nama ?? '', r.kategori_nama ?? '', r.sub_kategori_nama ?? '', r.tipe_nama ?? '', r.status, r.criticality_level, r.predicted_rul, r.maintenance_count, r.total_cost, formatDate(r.purchase_date)])
       );
     } else {
@@ -189,7 +235,7 @@ export default function ReportsPage() {
   // Summary stats
   const totalMaintCost = maintenanceRows.reduce((s, r) => s + r.cost, 0);
   const avgRul = assetRows.length ? Math.round(assetRows.reduce((s, r) => s + r.predicted_rul, 0) / assetRows.length) : 0;
-  const criticalCount = assetRows.filter((r) => r.predicted_rul <= 6).length;
+  const criticalCount = assetRows.filter((r) => r.predicted_rul <= 180).length;
 
   return (
     <ProtectedRoute>
@@ -238,7 +284,7 @@ export default function ReportsPage() {
                 <TrendingDown size={18} />
               </div>
               <div>
-                <div className="text-2xl font-bold text-gray-900">{avgRul} <span className="text-sm font-normal text-gray-400">bln</span></div>
+                <div className="text-2xl font-bold text-gray-900">{avgRul} <span className="text-sm font-normal text-gray-400">hari</span></div>
                 <div className="text-xs text-gray-500 mt-0.5">Rata-rata RUL</div>
               </div>
             </div>
@@ -264,7 +310,7 @@ export default function ReportsPage() {
             ]).map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
-                onClick={() => { setTab(key); setSearch(''); setCategoryFilter('Semua'); setStatusFilter('Semua'); resetPage(); }}
+                onClick={() => { setTab(key); setSearch(''); setCategoryFilter('Semua'); setStatusFilter('Semua'); setAssetSortBy('rul_asc'); setMaintenanceSortBy('date_desc'); resetPage(); }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                   tab === key
                     ? 'bg-blue-600 text-white shadow-md'
@@ -313,6 +359,26 @@ export default function ReportsPage() {
                 </select>
               )}
             </div>
+
+            <Tooltip content="Urutkan data laporan" position="bottom">
+              {tab === 'assets' ? (
+                <select
+                  value={assetSortBy}
+                  onChange={(e) => { setAssetSortBy(e.target.value); resetPage(); }}
+                  className="text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                >
+                  {ASSET_SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              ) : (
+                <select
+                  value={maintenanceSortBy}
+                  onChange={(e) => { setMaintenanceSortBy(e.target.value); resetPage(); }}
+                  className="text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                >
+                  {MAINTENANCE_SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              )}
+            </Tooltip>
           </div>
 
           {/* Table */}
@@ -343,7 +409,12 @@ export default function ReportsPage() {
                       <tr><td colSpan={8} className="text-center py-16 text-gray-400 text-sm">Tidak ada data yang sesuai.</td></tr>
                     )}
                     {!loading && (paginated as AssetRow[]).map((r, i) => (
-                      <tr key={r.id} className="stagger-item border-b border-gray-50 hover:bg-gray-50 transition-colors" style={{ animationDelay: `${i * 25}ms` }}>
+                      <tr
+                        key={r.id}
+                        onClick={() => setDetailAssetId(r.id)}
+                        className="stagger-item border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer"
+                        style={{ animationDelay: `${i * 25}ms` }}
+                      >
                         <td className="px-6 py-4">
                           <p className="font-medium text-gray-900 text-sm">{r.asset_name}</p>
                           <p className="text-xs text-gray-400 mt-0.5">{r.merk_nama ?? '—'}</p>
@@ -354,7 +425,7 @@ export default function ReportsPage() {
                         </td>
                         <td className="px-6 py-4">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${RUL_BADGE(r.predicted_rul)}`}>
-                            {r.predicted_rul} bln
+                            {r.predicted_rul} hari
                           </span>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">{r.criticality_level}</td>
@@ -415,34 +486,20 @@ export default function ReportsPage() {
             </div>
 
             {/* Pagination */}
-            {!loading && totalPages > 1 && (
-              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
-                <p className="text-xs text-gray-400">
-                  {activeData.length} data · halaman {page} dari {totalPages}
-                </p>
-                <div className="flex gap-1.5">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setPage(p)}
-                      className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
-                        p === page ? 'bg-blue-600 text-white' : 'border border-gray-200 text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            {!loading && (
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                total={activeData.length}
+                limit={PAGE_SIZE}
+                itemLabel={tab === 'assets' ? 'aset' : 'maintenance'}
+                onPageChange={setPage}
+              />
             )}
           </div>
-
-          {!loading && (
-            <div className="mt-4 text-center text-xs text-gray-400">
-              Menampilkan {Math.min(paginated.length, PAGE_SIZE)} dari {activeData.length} data
-            </div>
-          )}
         </div>
+
+        <AssetDetailPanel assetId={detailAssetId} onClose={() => setDetailAssetId(null)} />
       </main>
     </ProtectedRoute>
   );

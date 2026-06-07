@@ -17,6 +17,10 @@
   --foreground: #171717;
 }
 
+html {
+  font-size: 90%;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #050505;
