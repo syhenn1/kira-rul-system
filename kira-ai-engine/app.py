@@ -1,7 +1,10 @@
 import os
 import sys
+import asyncio
+import threading
 import importlib.metadata
 import traceback
+from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 import pandas as pd
@@ -19,13 +22,52 @@ try:
 except Exception:
     summarize_company_assets = None
 
+# import self-training pipeline
+try:
+    from trainer import run_training, RETRAINED_MODEL_PATH
+    _trainer_available = True
+except Exception as _trainer_import_err:
+    _trainer_available = False
+    RETRAINED_MODEL_PATH = ""
+    print(f"[Startup] Trainer module unavailable: {_trainer_import_err}")
+
+# import APScheduler
+try:
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.interval import IntervalTrigger
+    _scheduler_available = True
+except ImportError:
+    _scheduler_available = False
+    print("[Startup] APScheduler not installed — auto-retrain disabled.")
+
 app = FastAPI(title="Kira AI Engine", description="RUL Prediction API")
 
-# Global model state
+# ── Global model state ────────────────────────────────────────────────────────
+
 gb_model = None
 preprocessor = None
 _model_type: str = "none"
 _model_feature_names: List[str] = []
+
+# ── Self-training state ───────────────────────────────────────────────────────
+
+_training_lock = threading.Lock()
+_training_state: dict = {
+    "status": "idle",       # idle | running | success | failed
+    "last_started": None,
+    "last_finished": None,
+    "last_error": None,
+    "total_runs": 0,
+    "total_success": 0,
+    "last_metrics": None,   # {"mae": float, "r2": float}
+    "last_row_count": 0,
+    "last_feature_count": 0,
+    "last_duration_seconds": None,
+}
+
+_scheduler: Optional["AsyncIOScheduler"] = None  # type: ignore[assignment]
+
+# ── Fallback predictor ────────────────────────────────────────────────────────
 
 
 class MockRULPredictor:
@@ -35,6 +77,9 @@ class MockRULPredictor:
         if isinstance(data, pd.DataFrame) and len(data) > 0:
             base_rul += np.random.randint(-20, 20)
         return np.array([max(1, base_rul)])
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 
 def _extract_feature_names(obj) -> List[str]:
@@ -53,6 +98,35 @@ def _extract_feature_names(obj) -> List[str]:
                 cols.extend(c)
         return cols
     return []
+
+
+def _swap_model(model_path: str, label: str = "retrained") -> None:
+    """
+    Hot-swap global model from a joblib file.
+    Thread-safe: only replaces globals atomically via Python reference assignment.
+    """
+    global gb_model, preprocessor, _model_type, _model_feature_names
+
+    loaded = joblib.load(model_path)
+    if not hasattr(loaded, "predict"):
+        print(f"[Swap] Object at {model_path} has no predict(). Swap skipped.")
+        return
+
+    gb_model = loaded
+    preprocessor = None
+    _model_type = label
+    _model_feature_names = (
+        list(loaded.feature_names_in_)
+        if hasattr(loaded, "feature_names_in_")
+        else _extract_feature_names(loaded)
+    )
+    print(
+        f"[Swap] ✓ Model hot-swapped ({label}) — "
+        f"features={len(_model_feature_names)}"
+    )
+
+
+# ── Startup: load original model ──────────────────────────────────────────────
 
 
 @app.on_event("startup")
@@ -118,6 +192,98 @@ def load_models():
         gb_model = MockRULPredictor()
         _model_type = "mock"
 
+    # If a previously saved retrained model exists, prefer it
+    if _trainer_available and RETRAINED_MODEL_PATH and os.path.exists(RETRAINED_MODEL_PATH):
+        try:
+            print(f"[Startup] Found existing retrained model — loading as active model.")
+            _swap_model(RETRAINED_MODEL_PATH, label="auto_retrained")
+        except Exception as e:
+            print(f"[Startup] Could not load retrained model: {e}. Keeping original.")
+
+
+# ── Startup: launch APScheduler ───────────────────────────────────────────────
+
+
+@app.on_event("startup")
+async def start_scheduler():
+    global _scheduler
+
+    if not _scheduler_available or not _trainer_available:
+        print("[Scheduler] Disabled (missing apscheduler or trainer module).")
+        return
+
+    _scheduler = AsyncIOScheduler(timezone="UTC")
+    _scheduler.add_job(
+        _scheduled_retrain,
+        trigger=IntervalTrigger(minutes=5),
+        id="auto_retrain",
+        name="Auto Retrain Every 5 Minutes",
+        replace_existing=True,
+    )
+    _scheduler.start()
+
+    job = _scheduler.get_job("auto_retrain")
+    next_run = job.next_run_time.isoformat() if job and job.next_run_time else "unknown"
+    print(f"[Scheduler] ✓ Started — next retrain at {next_run}")
+
+
+@app.on_event("shutdown")
+async def stop_scheduler():
+    if _scheduler and _scheduler.running:
+        _scheduler.shutdown(wait=False)
+        print("[Scheduler] Stopped.")
+
+
+# ── Self-training logic ───────────────────────────────────────────────────────
+
+
+def _do_retrain_sync() -> None:
+    """
+    Blocking training task — runs in a thread-pool executor so the
+    asyncio event loop is never blocked.
+    Uses a non-blocking lock so concurrent triggers are silently skipped.
+    """
+    if not _training_lock.acquire(blocking=False):
+        print("[Trainer] Already running — skipped.")
+        return
+
+    _training_state["status"] = "running"
+    _training_state["last_started"] = datetime.now(timezone.utc).isoformat()
+    _training_state["total_runs"] += 1
+
+    try:
+        metadata = run_training()
+        _swap_model(RETRAINED_MODEL_PATH, label="auto_retrained")
+        _training_state.update(
+            {
+                "status": "success",
+                "last_finished": metadata["finished_at"],
+                "last_error": None,
+                "total_success": _training_state["total_success"] + 1,
+                "last_metrics": metadata["metrics"],
+                "last_row_count": metadata["row_count"],
+                "last_feature_count": metadata["feature_count"],
+                "last_duration_seconds": metadata["duration_seconds"],
+            }
+        )
+    except Exception as exc:
+        print(f"[Trainer] ✗ ERROR: {exc}\n{traceback.format_exc()}")
+        _training_state.update(
+            {
+                "status": "failed",
+                "last_finished": datetime.now(timezone.utc).isoformat(),
+                "last_error": str(exc),
+            }
+        )
+    finally:
+        _training_lock.release()
+
+
+async def _scheduled_retrain() -> None:
+    """APScheduler async job — offloads blocking work to thread pool."""
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _do_retrain_sync)
+
 
 # ── Input schema ──────────────────────────────────────────────────────────────
 
@@ -178,7 +344,7 @@ def _build_input_df(data: AssetInput) -> pd.DataFrame:
     # One-hot encode semua kolom kategorikal sekaligus
     df_ohe = pd.get_dummies(df_raw, columns=_CAT_COLS)
 
-    # Sejajarkan dengan 202 fitur yang diharapkan model
+    # Sejajarkan dengan fitur yang diharapkan model
     if _model_feature_names:
         df_aligned = df_ohe.reindex(columns=_model_feature_names, fill_value=0)
     else:
@@ -188,6 +354,7 @@ def _build_input_df(data: AssetInput) -> pd.DataFrame:
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
 
 @app.get("/")
 def read_root():
@@ -210,6 +377,43 @@ def model_info():
         "sklearn_version": importlib.metadata.version("scikit-learn"),
         "pandas_version": pd.__version__,
         "numpy_version": np.__version__,
+    }
+
+
+@app.get("/training-status")
+def training_status():
+    """Status retraining otomatis dan jadwal berikutnya."""
+    next_run: Optional[str] = None
+    if _scheduler and _scheduler.running:
+        job = _scheduler.get_job("auto_retrain")
+        if job and job.next_run_time:
+            next_run = job.next_run_time.isoformat()
+
+    return {
+        **_training_state,
+        "active_model_type": _model_type,
+        "active_feature_count": len(_model_feature_names),
+        "trainer_available": _trainer_available,
+        "scheduler_running": bool(_scheduler and _scheduler.running),
+        "next_scheduled_run": next_run,
+    }
+
+
+@app.post("/retrain")
+async def manual_retrain():
+    """Trigger retraining model sekarang (tanpa menunggu jadwal 5 menit)."""
+    if not _trainer_available:
+        raise HTTPException(status_code=503, detail="Trainer module tidak tersedia.")
+
+    if _training_state["status"] == "running":
+        raise HTTPException(status_code=409, detail="Retraining sedang berjalan.")
+
+    # Fire and forget — tidak blokir response
+    asyncio.create_task(_scheduled_retrain())
+    return {
+        "message": "Retraining dimulai.",
+        "status": "running",
+        "check": "/training-status",
     }
 
 
@@ -251,15 +455,15 @@ def predict_rul(data: AssetInput):
                 processed = processed.toarray()
             prediction = gb_model.predict(processed)
         else:
-            # Model berupa RandomForestRegressor tanpa Pipeline —
-            # perlu OHE manual sesuai 202 fitur training
+            # Model berupa estimator tanpa Pipeline —
+            # perlu OHE manual sesuai fitur training (original RF atau retrained GB)
             df_input = _build_input_df(data)
             print(f"[Predict] Input shape setelah OHE: {df_input.shape}  (expected {len(_model_feature_names)})")
             prediction = gb_model.predict(df_input)
 
         result = float(prediction[0])
         print(f"[Predict] [OK] predicted_rul = {result:.2f}")
-        return {"predicted_rul": result, "status": "success"}
+        return {"predicted_rul": result, "status": "success", "model_type": _model_type}
 
     except Exception as e:
         print(f"[Predict] [ERR] {e}")
