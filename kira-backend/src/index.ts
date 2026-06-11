@@ -80,9 +80,10 @@ app.get('/api/assets', authenticateJWT, async (req: Request, res: Response) => {
       category = '', criticality = '', gedung_id = '',
     } = req.query;
 
+    const fetchAll    = String(limit).trim().toLowerCase() === 'all';
     const pageNumber  = Math.max(1, parseInt(String(page), 10) || 1);
-    const limitNumber = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 10));
-    const skip        = (pageNumber - 1) * limitNumber;
+    const limitNumber = fetchAll ? Infinity : Math.min(100, Math.max(1, parseInt(String(limit), 10) || 10));
+    const skip        = fetchAll ? 0 : (pageNumber - 1) * limitNumber;
     const searchText      = String(search).trim();
     const statusText      = String(status).trim();
     const sortByText      = String(sort_by).trim();
@@ -105,10 +106,11 @@ app.get('/api/assets', authenticateJWT, async (req: Request, res: Response) => {
     if (searchText) {
       andClauses.push({
         OR: [
-          { asset_name: { contains: searchText, mode: 'insensitive' } },
-          { merk:     { nama: { contains: searchText, mode: 'insensitive' } } },
-          { kategori: { nama: { contains: searchText, mode: 'insensitive' } } },
-          { tipe:     { nama: { contains: searchText, mode: 'insensitive' } } },
+          { asset_name:  { contains: searchText, mode: 'insensitive' } },
+          { merk:        { nama: { contains: searchText, mode: 'insensitive' } } },
+          { kategori:    { nama: { contains: searchText, mode: 'insensitive' } } },
+          { subKategori: { nama: { contains: searchText, mode: 'insensitive' } } },
+          { tipe:        { nama: { contains: searchText, mode: 'insensitive' } } },
         ],
       });
     }
@@ -228,9 +230,9 @@ app.get('/api/assets', authenticateJWT, async (req: Request, res: Response) => {
       },
       pagination: {
         page: pageNumber,
-        limit: limitNumber,
+        limit: fetchAll ? filteredTotal : limitNumber,
         total: filteredTotal,
-        totalPages: Math.ceil(filteredTotal / limitNumber) || 1,
+        totalPages: fetchAll ? 1 : (Math.ceil(filteredTotal / limitNumber) || 1),
       },
     });
   } catch (error) {
@@ -1320,6 +1322,10 @@ app.post('/api/summarize', authenticateJWT, async (req: Request, res: Response) 
     }
     const company_id = userCompany.id;
 
+    // The summarizer must analyze the SAME aggregated view the user sees on the dashboard —
+    // not a separate raw DB query — so we build it here and hand it to the AI engine directly.
+    const dashboardData = await buildDashboardData(company_id);
+
     const aiEngineBase = (process.env.AI_ENGINE_URL || 'http://localhost:8000').replace(/\/$/, '');
     const aiEngineUrl = `${aiEngineBase}/summarize`;
     const response = await fetch(aiEngineUrl, {
@@ -1329,6 +1335,8 @@ app.post('/api/summarize', authenticateJWT, async (req: Request, res: Response) 
       },
       body: JSON.stringify({
         company_id,
+        assets: dashboardData.asset_insights,
+        critical_count: dashboardData.alerts_summary.critical,
         limit: limit ?? 10,
         temperature: temperature ?? 0.2,
       }),
@@ -1513,13 +1521,12 @@ app.get('/api/alerts', authenticateJWT, async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/dashboard — aggregated stats for the dashboard
-app.get('/api/dashboard', authenticateJWT, async (req: Request, res: Response) => {
-  try {
-    const userCompany = await findUserCompany((req as any).user.id);
-    if (!userCompany) return res.status(404).json({ error: 'No company found' });
-    const companyId = userCompany.id;
-
+// Builds the full aggregated dashboard payload for a company. Shared by GET /api/dashboard
+// (rendering the dashboard UI) and POST /api/summarize (feeding the AI summarizer) — both
+// read the SAME aggregated business-process view, so the summary the AI generates always
+// matches what the user sees on the dashboard instead of being computed from a separate,
+// potentially-divergent raw query.
+async function buildDashboardData(companyId: string) {
     // Asset counts total + per status
     const totalAssets = await prisma.asset.count({ where: { id_perusahaan: companyId } });
     const statusCounts: any[] = await prisma.$queryRaw`
@@ -1618,9 +1625,37 @@ app.get('/api/dashboard', authenticateJWT, async (req: Request, res: Response) =
       LIMIT 5
     `;
 
+    // Per-asset business insight feed — latest prediction-history aggregate joined with
+    // brand/category/status, ordered by remaining-useful-life (most urgent first). This is
+    // the detailed "what needs a decision" view: it's what powers the AI summary and could
+    // equally drive business processes like prioritized maintenance scheduling, procurement
+    // planning (via total/max maintenance cost), or vendor/brand reliability reviews
+    // (via maintenance_count + mode_severity per brand/category).
+    const assetInsights: any[] = await prisma.$queryRaw`
+      SELECT a.id, a.asset_name,
+             COALESCE(mk.nama, 'Generic') AS brand,
+             COALESCE(k.nama, 'Mekanik') AS category,
+             a.status,
+             aph.maintenance_count, aph.average_down_time, aph.total_maintenance_cost,
+             aph.max_maintenance_cost, aph.mode_severity, aph.predicted_rul, aph.recorded_at
+      FROM (
+        SELECT DISTINCT ON (id_asset)
+               id_asset, maintenance_count, average_down_time, total_maintenance_cost,
+               max_maintenance_cost, mode_severity, predicted_rul, recorded_at
+        FROM asset_prediction_history
+        ORDER BY id_asset, recorded_at DESC
+      ) aph
+      JOIN assets a ON aph.id_asset = a.id
+      LEFT JOIN merk mk ON mk.id = a.merk_id
+      LEFT JOIN kategori k ON k.id = a.kategori_id
+      WHERE a.id_perusahaan = ${companyId}
+      ORDER BY aph.predicted_rul ASC NULLS LAST
+      LIMIT 20
+    `;
+
     const alerts = alertsSummary[0] ?? { critical: 0, high: 0, watch: 0 };
 
-    return res.status(200).json({
+    return {
       stats: {
         total: totalAssets,
         by_status: statusCounts,
@@ -1650,7 +1685,31 @@ app.get('/api/dashboard', authenticateJWT, async (req: Request, res: Response) =
         cost: m.cost,
         user_name: m.user_name,
       })),
-    });
+      asset_insights: assetInsights.map((a: any) => ({
+        id: a.id,
+        name: a.asset_name,
+        brand: a.brand,
+        category: a.category,
+        status: a.status,
+        maintenance_count: a.maintenance_count,
+        average_down_time: a.average_down_time,
+        total_maintenance_cost: a.total_maintenance_cost,
+        max_maintenance_cost: a.max_maintenance_cost,
+        mode_severity: a.mode_severity,
+        predicted_rul: a.predicted_rul,
+        recorded_at: a.recorded_at,
+      })),
+    };
+}
+
+// GET /api/dashboard — aggregated stats for the dashboard
+app.get('/api/dashboard', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userCompany = await findUserCompany((req as any).user.id);
+    if (!userCompany) return res.status(404).json({ error: 'No company found' });
+
+    const dashboardData = await buildDashboardData(userCompany.id);
+    return res.status(200).json(dashboardData);
   } catch (error) {
     console.error('Error fetching dashboard data:', error);
     return res.status(500).json({ error: 'Internal Server Error' });

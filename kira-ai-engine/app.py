@@ -301,7 +301,7 @@ def load_models():
     print(f"[Startup] scikit-learn version: {sklearn_ver}")
     print(f"[Startup] pandas    version: {pd.__version__}")
 
-    model_path = os.path.join(os.path.dirname(__file__), "random_forest_model_5years.joblib")
+    model_path = os.path.join(os.path.dirname(__file__), "sintesised_random_forest_model.joblib")
 
     try:
         if not os.path.exists(model_path):
@@ -472,6 +472,11 @@ class AssetInput(BaseModel):
 
 class SummarizeRequest(BaseModel):
     company_id: Optional[str] = None
+    # Per-asset insight records lifted straight from the backend's aggregated dashboard
+    # payload (`asset_insights` in /api/dashboard) — the summarizer reads THIS, not Postgres,
+    # so its narrative always matches what the user sees on the dashboard.
+    assets: Optional[List[dict]] = None
+    critical_count: Optional[int] = 0
     limit: Optional[int] = 10
     temperature: Optional[float] = 0.2
 
@@ -707,10 +712,11 @@ def summarize(req: SummarizeRequest):
     if summarize_company_assets is None:
         raise HTTPException(status_code=500, detail="Summarizer module tidak tersedia.")
     try:
-        summary = (
-            summarize_company_assets(req.company_id, limit=req.limit, temperature=req.temperature)
-            if req.company_id
-            else summarize_company_assets(limit=req.limit, temperature=req.temperature)
+        summary = summarize_company_assets(
+            req.assets or [],
+            critical_count=req.critical_count or 0,
+            limit=req.limit,
+            temperature=req.temperature,
         )
         if isinstance(summary, dict) and "summary" in summary:
             return {

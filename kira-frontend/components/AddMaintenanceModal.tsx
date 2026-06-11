@@ -307,7 +307,7 @@ export default function AddMaintenanceModal({ open, onClose, onSuccess }: Props)
     Promise.all([
       apiFetch('/api/gedung',       { headers: h }).then((r) => r.json()),
       apiFetch('/api/technicians',  { headers: h }).then((r) => r.json()),
-      apiFetch('/api/assets',       { headers: h }).then((r) => r.json()),
+      apiFetch('/api/assets?limit=all', { headers: h }).then((r) => r.json()),
     ])
       .then(([gedungData, techData, assetData]) => {
         setGedungList(gedungData.gedung || []);

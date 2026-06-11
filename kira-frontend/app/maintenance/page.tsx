@@ -910,7 +910,7 @@ function EditMaintenanceModal({
       setIsLoadingAssets(true);
       setAssetError(null);
       try {
-        const response = await fetch(`${API_URL}/api/assets`, {
+        const response = await fetch(`${API_URL}/api/assets?limit=all`, {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });

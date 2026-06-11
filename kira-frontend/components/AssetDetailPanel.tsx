@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import { Maximize2, PanelRight, X, Loader2 } from 'lucide-react';
 import Tooltip from '@/components/Tooltip';
@@ -138,6 +138,8 @@ export default function AssetDetailPanel({
   const [mode, setMode] = useState<'drawer' | 'modal'>('drawer');
   const [visible, setVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('info');
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0 });
   const [expandedMaintId, setExpandedMaintId] = useState<string | null>(null);
   const [asset, setAsset] = useState<AssetDetail | null>(null);
   const [gedungList, setGedungList] = useState<Gedung[]>([]);
@@ -156,6 +158,13 @@ export default function AssetDetailPanel({
     const frame = requestAnimationFrame(() => setVisible(true));
     return () => cancelAnimationFrame(frame);
   }, [open]);
+
+  // Slide the active-tab underline indicator to match the active button's position/width
+  useEffect(() => {
+    const idx = TABS.findIndex((t) => t.key === activeTab);
+    const el = tabRefs.current[idx];
+    if (el) setTabIndicator({ left: el.offsetLeft, width: el.offsetWidth });
+  }, [activeTab, visible]);
 
   useEffect(() => {
     if (!assetId) return;
@@ -249,7 +258,7 @@ export default function AssetDetailPanel({
         <div
           className={
             isModal
-              ? `bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden transition-all duration-300 ${visible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`
+              ? `bg-white rounded-3xl shadow-2xl w-full max-w-3xl h-[90vh] flex flex-col overflow-hidden transition-all duration-300 ${visible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`
               : `bg-white shadow-2xl w-full max-w-xl h-full flex flex-col overflow-hidden transition-transform duration-300 ease-out ${visible ? 'translate-x-0' : 'translate-x-full'}`
           }
         >
@@ -277,18 +286,23 @@ export default function AssetDetailPanel({
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-6 px-6 border-b shrink-0 overflow-x-auto">
-            {TABS.map((t) => (
+          <div className="relative flex gap-6 px-6 border-b shrink-0 overflow-x-auto scrollbar-hidden">
+            {TABS.map((t, i) => (
               <button
                 key={t.key}
+                ref={(el) => { tabRefs.current[i] = el; }}
                 onClick={() => setActiveTab(t.key)}
-                className={`pb-3 pt-3 whitespace-nowrap text-sm font-medium border-b-2 transition ${
-                  activeTab === t.key ? 'text-blue-600 border-blue-600' : 'text-gray-400 border-transparent hover:text-gray-600'
+                className={`pb-3 pt-3 whitespace-nowrap text-sm font-medium transition-colors ${
+                  activeTab === t.key ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'
                 }`}
               >
                 {t.label}
               </button>
             ))}
+            <span
+              className="absolute bottom-0 h-0.5 bg-blue-600 transition-[left,width] duration-300 ease-out"
+              style={{ left: tabIndicator.left, width: tabIndicator.width }}
+            />
           </div>
 
           {/* Content */}
