@@ -732,7 +732,6 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
     const {
       id_asset,
       maintenance_type,
-      severity,
       cost,
       assigned_technician_id,
       id_teknisi,
@@ -766,6 +765,35 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
       return res.status(404).json({ error: 'Asset not found' });
     }
 
+    // Prediksi severity via AI engine (opsional — hanya jika field teks tersedia)
+    let predicted_severity: string | null = null;
+    let severity_confidence: number | null = null;
+    if (jenis_kerusakan && penyebab) {
+      try {
+        const aiEngineBase = (process.env.AI_ENGINE_URL || 'http://localhost:8000').replace(/\/$/, '');
+        const sevResponse = await fetch(`${aiEngineBase}/predict-severity`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jenis_kerusakan:  jenis_kerusakan,
+            penyebab:         penyebab,
+            spare_part:       spare_part_digunakan || '',
+            kategori:         (asset as any).kategori?.nama    || '',
+            sub_kategori:     (asset as any).subKategori?.nama || '',
+            tipe:             (asset as any).tipe?.nama        || '',
+            biaya_perbaikan:  cost ? parseFloat(cost) : 0,
+          }),
+        });
+        if (sevResponse.ok) {
+          const sevData = await sevResponse.json();
+          predicted_severity  = sevData.predicted_severity  ?? null;
+          severity_confidence = sevData.confidence          ?? null;
+        }
+      } catch (e) {
+        console.warn("AI Engine predict-severity failed (non-fatal):", e);
+      }
+    }
+
     // Insert maintenance into DB — maintenance baru selalu mulai berstatus "Scheduled"
     // (tanggal "dijadwalkan" = created_at log ini); progres berikutnya dicatat lewat maintenance_logs.
     const newMaintenance = await prisma.maintenance.create({
@@ -775,13 +803,19 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
         assigned_technician_id: assigned_technician_id || null,
         id_teknisi,
         maintenance_type: maintenance_type || 'Preventive',
-        severity: severity || 'Medium',
+        severity: predicted_severity || 'Medium',
         down_time: 0,
         cost: cost ? parseFloat(cost) : 0.0,
         jenis_kerusakan:      jenis_kerusakan      || null,
         penyebab:             penyebab             || null,
         spare_part_digunakan: spare_part_digunakan || null,
       }
+    });
+
+    // Aset yang sedang dijadwalkan maintenance otomatis menjadi tidak aktif
+    await prisma.asset.update({
+      where: { id: id_asset },
+      data: { status: 'Inactive' },
     });
 
     let createdMaintenanceLog;
@@ -862,35 +896,6 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
       }
     } catch (e) {
       console.warn("AI Engine predict failed during maintenance creation:", e);
-    }
-
-    // Prediksi severity via AI engine (opsional — hanya jika field teks tersedia)
-    let predicted_severity: string | null = null;
-    let severity_confidence: number | null = null;
-    if (jenis_kerusakan && penyebab) {
-      try {
-        const aiEngineBase = (process.env.AI_ENGINE_URL || 'http://localhost:8000').replace(/\/$/, '');
-        const sevResponse = await fetch(`${aiEngineBase}/predict-severity`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jenis_kerusakan:  jenis_kerusakan,
-            penyebab:         penyebab,
-            spare_part:       spare_part_digunakan || '',
-            kategori:         (asset as any).kategori?.nama    || '',
-            sub_kategori:     (asset as any).subKategori?.nama || '',
-            tipe:             (asset as any).tipe?.nama        || '',
-            biaya_perbaikan:  cost ? parseFloat(cost) : 0,
-          }),
-        });
-        if (sevResponse.ok) {
-          const sevData = await sevResponse.json();
-          predicted_severity  = sevData.predicted_severity  ?? null;
-          severity_confidence = sevData.confidence          ?? null;
-        }
-      } catch (e) {
-        console.warn("AI Engine predict-severity failed (non-fatal):", e);
-      }
     }
 
     // Save history with the predicted RUL and actual aggregates
