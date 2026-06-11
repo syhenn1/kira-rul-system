@@ -79,30 +79,71 @@ class TestRetrainEndpoint:
 
 
 class TestSummarizeEndpoint:
-    def test_success_passes_through_summary_and_assets(self, monkeypatch):
-        fake_summary = {"summary": "Ringkasan kondisi aset terkini.", "assets": [{"id": "a1", "pred_rul": 100}]}
+    def test_success_passes_through_summary_assets_and_critical_count(self, monkeypatch):
+        fake_summary = {
+            "summary": "Ringkasan kondisi aset terkini.",
+            "assets": [{"id": "a1", "pred_rul": 100}],
+            "critical_count": 3,
+        }
         monkeypatch.setattr(app_module, "summarize_company_assets",
                             lambda *args, **kwargs: fake_summary)
 
-        response = client.post("/summarize", json={"company_id": "company-1", "limit": 5})
+        response = client.post("/summarize", json={
+            "company_id": "company-1",
+            "assets": [{"id": "a1", "name": "AC Split Lobby", "predicted_rul": 100}],
+            "critical_count": 3,
+            "limit": 5,
+        })
 
         assert response.status_code == 200
         body = response.json()
-        assert body == {"company_id": "company-1", "summary": fake_summary["summary"], "assets": fake_summary["assets"]}
+        assert body == {
+            "company_id": "company-1",
+            "summary": fake_summary["summary"],
+            "assets": fake_summary["assets"],
+            "critical_count": fake_summary["critical_count"],
+        }
 
-    def test_uses_no_company_id_branch_when_company_id_omitted(self, monkeypatch):
+    def test_forwards_dashboard_assets_critical_count_limit_and_temperature_as_kwargs(self, monkeypatch):
         captured = {}
 
-        def fake_summarize(**kwargs):
+        def fake_summarize(assets, **kwargs):
+            captured["assets"] = assets
             captured.update(kwargs)
-            return {"summary": "ok", "assets": []}
+            return {"summary": "ok", "assets": [], "critical_count": 0}
+
+        monkeypatch.setattr(app_module, "summarize_company_assets", fake_summarize)
+
+        dashboard_assets = [{"id": "a1", "name": "AC Split Lobby", "predicted_rul": 120}]
+        response = client.post("/summarize", json={
+            "company_id": "company-1",
+            "assets": dashboard_assets,
+            "critical_count": 2,
+            "limit": 7,
+            "temperature": 0.5,
+        })
+
+        assert response.status_code == 200
+        assert captured["assets"] == dashboard_assets
+        assert captured["critical_count"] == 2
+        assert captured["limit"] == 7
+        assert captured["temperature"] == 0.5
+
+    def test_defaults_assets_to_empty_list_and_critical_count_to_zero_when_omitted(self, monkeypatch):
+        captured = {}
+
+        def fake_summarize(assets, **kwargs):
+            captured["assets"] = assets
+            captured.update(kwargs)
+            return {"summary": "ok", "assets": [], "critical_count": 0}
 
         monkeypatch.setattr(app_module, "summarize_company_assets", fake_summarize)
 
         response = client.post("/summarize", json={})
 
         assert response.status_code == 200
-        assert "company_id" not in captured  # the no-company_id call path omits the kwarg entirely
+        assert captured["assets"] == []
+        assert captured["critical_count"] == 0
         assert captured["limit"] == 10  # SummarizeRequest default
         assert captured["temperature"] == 0.2
 

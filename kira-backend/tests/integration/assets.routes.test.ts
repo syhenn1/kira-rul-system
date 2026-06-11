@@ -63,6 +63,28 @@ describe('GET /api/assets', () => {
     expect(res.body.pagination.limit).toBe(10);
   });
 
+  it('returns every matching asset, unpaginated, when limit=all', async () => {
+    prismaMock.asset.findMany.mockResolvedValue(
+      Array.from({ length: 150 }, (_, i) => ({
+        id: `asset-${i}`,
+        asset_name: `Asset ${i}`,
+        gedung: null,
+        merk: null,
+        kategori: null,
+        subKategori: null,
+        tipe: null,
+        prediction_history: [],
+        maintenances: [],
+      })) as any,
+    );
+
+    const res = await request(app).get('/api/assets?limit=all').set('Authorization', auth());
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(150);
+    expect(res.body.pagination).toMatchObject({ page: 1, limit: 150, total: 150, totalPages: 1 });
+  });
+
   it('returns 500 with details when the database query fails', async () => {
     prismaMock.asset.findMany.mockRejectedValue(new Error('connection terminated'));
 

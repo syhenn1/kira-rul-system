@@ -1,8 +1,6 @@
 import os
 from datetime import datetime
 from dotenv import load_dotenv
-import psycopg2
-from urllib.parse import urlsplit
 import requests
 
 load_dotenv()
@@ -15,69 +13,32 @@ HF_ROUTER_URL = os.getenv("HF_ROUTER_URL", "https://router.huggingface.co/v1/cha
 # importing this module doesn't fail when environment isn't available at import time.
 
 
+def rows_from_dashboard_assets(assets):
+    """Convert the per-asset insight records from the backend's aggregated dashboard
+    payload (`asset_insights`, see /api/dashboard and /api/summarize in kira-backend)
+    into the 12-tuple row shape `build_prompt`/`_rule_based_summary` expect.
 
-def fetch_asset_aggregates(company_id: str, limit: int = 20):
-    """Fetch recent asset aggregate records for a company from Postgres."""
-    DATABASE_URL = os.getenv("DATABASE_URL")
-    if not DATABASE_URL:
-        raise RuntimeError("DATABASE_URL not set in environment")
-    
-    # Strip any accidental quotes from the environment variable
-    DATABASE_URL = DATABASE_URL.strip('"').strip("'")
-    
-    # Use urllib to parse the URL and pass explicit parameters to psycopg2
-    # to avoid any libpq parsing issues with unsupported query parameters (like schema)
-    parsed = urlsplit(DATABASE_URL)
-    conn = psycopg2.connect(
-        dbname=parsed.path.lstrip('/'),
-        user=parsed.username,
-        password=parsed.password,
-        host=parsed.hostname,
-        port=parsed.port
-    )
-    cur = conn.cursor()
-    # Latest prediction-history record per asset (one row per asset, most recent first).
-    latest_per_asset = """
-        SELECT DISTINCT ON (id_asset)
-               id_asset, maintenance_count, average_down_time, total_maintenance_cost,
-               max_maintenance_cost, mode_severity, predicted_rul, recorded_at
-        FROM asset_prediction_history
-        ORDER BY id_asset, recorded_at DESC
+    The summarizer intentionally does NOT query Postgres on its own anymore — it
+    analyzes the SAME aggregated business view the user already sees on the
+    dashboard, so the AI's narrative can never drift from what's on screen.
     """
-    sql = f"""
-    SELECT a.id, a.asset_name,
-           COALESCE(m.nama, 'Generic') AS brand,
-           COALESCE(k.nama, 'Mekanik') AS category,
-           a.status,
-           aph.maintenance_count, aph.average_down_time, aph.total_maintenance_cost,
-           aph.max_maintenance_cost, aph.mode_severity, aph.predicted_rul, aph.recorded_at
-    FROM ({latest_per_asset}) aph
-    JOIN assets a ON aph.id_asset = a.id
-    JOIN companies c ON a.id_perusahaan = c.id
-    LEFT JOIN merk m ON m.id = a.merk_id
-    LEFT JOIN kategori k ON k.id = a.kategori_id
-    WHERE c.id = %s
-    ORDER BY aph.predicted_rul ASC NULLS LAST
-    LIMIT %s
-    """
-    cur.execute(sql, (company_id, limit))
-    rows = cur.fetchall()
-
-    # True count of critical assets (RUL <= 180) across the whole company — independent
-    # of `limit`, so the frontend badge reflects the real population, not just the sample size.
-    count_sql = f"""
-    SELECT COUNT(*)
-    FROM ({latest_per_asset}) aph
-    JOIN assets a ON aph.id_asset = a.id
-    JOIN companies c ON a.id_perusahaan = c.id
-    WHERE c.id = %s AND aph.predicted_rul <= 180
-    """
-    cur.execute(count_sql, (company_id,))
-    critical_count = cur.fetchone()[0]
-
-    cur.close()
-    conn.close()
-    return rows, critical_count
+    rows = []
+    for a in assets or []:
+        rows.append((
+            a.get("id"),
+            a.get("name"),
+            a.get("brand"),
+            a.get("category"),
+            a.get("status"),
+            a.get("maintenance_count"),
+            a.get("average_down_time"),
+            a.get("total_maintenance_cost"),
+            a.get("max_maintenance_cost"),
+            a.get("mode_severity"),
+            a.get("predicted_rul"),
+            a.get("recorded_at"),
+        ))
+    return rows
 
 
 import re
@@ -126,7 +87,7 @@ class ExplicitNLPPipeline:
         
         return features
 
-def build_prompt(rows):
+def build_prompt(rows, critical_count=0):
     prioritas_tinggi = []
     normal = []
     
@@ -196,9 +157,12 @@ def build_prompt(rows):
     instruction = (
         "Anda adalah manajer aset senior yang membaca data kondisi aset dan menuliskan ANALISIS-nya untuk eksekutif perusahaan — "
         "bukan sekadar membacakan ulang isi data.\n\n"
-        "Tulis 2-3 kalimat ANALISIS dalam Bahasa Indonesia yang terdengar seperti ditulis oleh manusia — lugas, langsung ke inti, "
-        "tanpa basa-basi. Tugas Anda adalah membaca pola di balik angka-angka (mengapa sesuatu terjadi, apa kaitannya, apa dampaknya "
-        "ke depan) lalu menyampaikan KESIMPULAN dan IMPLIKASINYA — bukan menyebutkan ulang setiap angka satu per satu seolah membacakan formulir.\n\n"
+        "Tulis MAKSIMAL 3 kalimat PENDEK (idealnya 2), total tidak lebih dari sekitar 70 kata, dalam Bahasa Indonesia yang "
+        "terdengar seperti ditulis oleh manusia — lugas, langsung ke inti, tanpa basa-basi. Tugas Anda adalah membaca pola di "
+        "balik angka-angka (mengapa sesuatu terjadi, apa kaitannya, apa dampaknya ke depan) lalu menyampaikan KESIMPULAN dan "
+        "IMPLIKASINYA secara ringkas — bukan menyebutkan ulang setiap angka satu per satu seolah membacakan formulir. "
+        "PRIORITASKAN keringkasan: lebih baik 2 kalimat tajam dan utuh daripada 3 kalimat yang bertele-tele atau terpotong "
+        "di tengah.\n\n"
         "Threshold RUL (Remaining Useful Life) yang berlaku dalam sistem (satuan HARI):\n"
         "- CRITICAL: RUL ≤ 180 hari — perlu penanganan segera\n"
         "- HIGH: RUL ≤ 365 hari — prioritas tinggi\n"
@@ -224,9 +188,13 @@ def build_prompt(rows):
         "ditandai 'KATEGORI OK/SEHAT', JANGAN sebutkan angka RUL tersebut sebagai bukti masalah — RUL aset itu sehat. "
         "Sebutkan alasan aktualnya sesuai baris 'Alasan masuk prioritas tinggi'. Hanya kutip nilai RUL sebagai masalah "
         "untuk aset yang alasannya memang 'RUL rendah'.\n"
+        "9. Jika menyebutkan ANGKA TOTAL aset berstatus CRITICAL (RUL ≤ 180 hari) di seluruh perusahaan, WAJIB gunakan "
+        f"angka dari [FAKTA SISTEM] di bawah ({critical_count}) — JANGAN menghitung sendiri jumlah blok di "
+        "[PRIORITAS TINGGI], karena daftar tersebut hanya sampel aset dengan RUL terendah, bukan jumlah total perusahaan.\n"
     )
 
     prompt_data = (
+        f"[FAKTA SISTEM]\nJumlah total aset berstatus CRITICAL (RUL ≤ 180 hari) di seluruh perusahaan: {critical_count}\n\n"
         f"[Top Keywords dari data aset]: {top_keywords}\n\n"
         f"[PRIORITAS TINGGI — aset yang memerlukan perhatian segera]\n{teks_prioritas}\n\n"
         f"[KONDISI NORMAL — aset dengan performa baik]\n{teks_normal}"
@@ -268,16 +236,23 @@ _MODEL_CANDIDATES = [
 ]
 
 
-def summarize_company_assets(company_id: str, limit: int = 20, temperature: float = 0.2):
+def summarize_company_assets(assets, critical_count: int = 0, limit: int = 20, temperature: float = 0.2):
+    """Generate an executive summary from the company's aggregated dashboard data.
+
+    `assets` is the `asset_insights` list from the backend's /api/dashboard payload
+    (already ordered by predicted_rul ascending) — the same business-process view
+    rendered on screen. We deliberately take this as input instead of querying
+    Postgres ourselves, so the AI's narrative is always consistent with the dashboard.
+    """
     HF_TOKEN = os.getenv("HF_TOKEN")
     if not HF_TOKEN:
         raise RuntimeError("HF_TOKEN not set in environment")
 
-    rows, critical_count = fetch_asset_aggregates(company_id, limit)
+    rows = rows_from_dashboard_assets((assets or [])[:limit])
     if not rows:
         return {"summary": "Tidak ada data aset untuk diringkas.", "assets": [], "critical_count": 0}
 
-    messages, assets_data = build_prompt(rows)
+    messages, assets_data = build_prompt(rows, critical_count=critical_count)
     url = HF_ROUTER_URL
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
@@ -290,7 +265,7 @@ def summarize_company_assets(company_id: str, limit: int = 20, temperature: floa
             "model": model_id,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": 300,
+            "max_tokens": 350,
         }
         if provider:
             payload["provider"] = provider
@@ -316,11 +291,19 @@ def summarize_company_assets(company_id: str, limit: int = 20, temperature: floa
 
 if __name__ == "__main__":
     import argparse
+    import json
 
-    parser = argparse.ArgumentParser(description="Summarize company assets using HF model via OpenAI API")
-    parser.add_argument("company_id", help="Company UUID to summarize")
+    parser = argparse.ArgumentParser(
+        description="Summarize a company's assets from a dashboard payload (JSON file with an `asset_insights` array, e.g. a saved /api/dashboard response)"
+    )
+    parser.add_argument("dashboard_json", help="Path to a JSON file containing the dashboard payload")
     parser.add_argument("--limit", type=int, default=10)
     args = parser.parse_args()
 
-    summary = summarize_company_assets(args.company_id, limit=args.limit)
+    with open(args.dashboard_json, "r", encoding="utf-8") as f:
+        dashboard = json.load(f)
+
+    assets = dashboard.get("asset_insights", [])
+    critical_count = dashboard.get("alerts_summary", {}).get("critical", 0)
+    summary = summarize_company_assets(assets, critical_count=critical_count, limit=args.limit)
     print(summary)

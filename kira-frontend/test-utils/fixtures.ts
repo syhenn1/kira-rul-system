@@ -27,11 +27,18 @@ export const healthyAsset = (overrides: Partial<SummaryAsset> = {}): SummaryAsse
   ...overrides,
 });
 
-export const summarizeSuccessBody = (overrides: Partial<{ summary: string; assets: SummaryAsset[] }> = {}) => ({
-  summary: 'Sebagian besar aset dalam kondisi baik, namun beberapa unit AC memerlukan perhatian dalam waktu dekat.',
-  assets: [criticalAsset(), healthyAsset()],
-  ...overrides,
-});
+export const summarizeSuccessBody = (overrides: Partial<{ summary: string; assets: SummaryAsset[]; critical_count: number }> = {}) => {
+  const assets = overrides.assets ?? [criticalAsset(), healthyAsset()];
+  return {
+    summary: 'Sebagian besar aset dalam kondisi baik, namun beberapa unit AC memerlukan perhatian dalam waktu dekat.',
+    // Defaults to the number of assets at/under the 180-day "Aset Kritis" threshold,
+    // matching how kira-backend derives critical_count from its dashboard aggregate —
+    // override explicitly when a test needs a mismatched count.
+    critical_count: assets.filter((a) => a.pred_rul != null && a.pred_rul <= 180).length,
+    ...overrides,
+    assets,
+  };
+};
 
 export const FAKE_TOKEN = 'fake-jwt-token-for-tests';
 

@@ -8,7 +8,6 @@ import StatCard from '@/components/StatCard';
 import SummaryCard from '@/components/SummaryCard';
 import WelcomeHeader from '@/components/WelcomeHeader';
 import { AssetBarChart, AssetDonutChart } from '@/components/Charts';
-import RecentActivities from '@/components/RecentActivities';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import OnboardingModal from '@/components/OnboardingModal';
 import TourOverlay from '@/components/TourOverlay';
@@ -26,7 +25,7 @@ const TOUR_STEPS = [
   {
     target: 'stat-cards',
     title: 'KPI Aset',
-    desc: '4 kartu ini menampilkan total aset, yang sedang dipakai, yang tersedia, dan yang memerlukan maintenance.',
+    desc: '4 kartu ini menampilkan total aset, yang sedang dipakai, yang sedang maintenance, dan yang memerlukan perhatian (RUL kritis).',
   },
   {
     target: 'asset-overview-chart',
@@ -42,11 +41,6 @@ const TOUR_STEPS = [
     target: 'upcoming-maintenance',
     title: 'Maintenance Aktif Terbaru',
     desc: 'Daftar maintenance yang masih berjalan atau menunggu, diurutkan dari yang terbaru dibuat. Klik "Lihat Semua" untuk lihat semua maintenance.',
-  },
-  {
-    target: 'recent-activities',
-    title: 'Aktivitas Terkini',
-    desc: 'Log aktivitas terbaru di sistem — penambahan aset, perubahan status, dan tindakan maintenance.',
   },
 ];
 
@@ -76,6 +70,20 @@ type DashboardData = {
     cost: number;
     user_name: string;
   }[];
+  asset_insights: {
+    id: string;
+    name: string;
+    brand: string;
+    category: string;
+    status: string;
+    maintenance_count: number;
+    average_down_time: number | null;
+    total_maintenance_cost: number | null;
+    max_maintenance_cost: number | null;
+    mode_severity: string | null;
+    predicted_rul: number | null;
+    recorded_at: string | null;
+  }[];
 };
 
 function statusCount(data: DashboardData | null, status: string) {
@@ -94,6 +102,25 @@ const SEVERITY_CLASS: Record<string, string> = {
   Medium: 'bg-yellow-100 text-yellow-700',
   Low: 'bg-green-100 text-green-700',
 };
+
+const MAINTENANCE_STATUS_CLASS: Record<string, string> = {
+  Completed: 'bg-green-100 text-green-700',
+  'In Progress': 'bg-yellow-100 text-yellow-700',
+  Scheduled: 'bg-blue-100 text-blue-700',
+};
+
+function rulColor(rul: number | null) {
+  if (rul == null) return 'text-gray-400';
+  if (rul <= 180) return 'text-red-600';
+  if (rul <= 365) return 'text-orange-500';
+  if (rul <= 730) return 'text-yellow-600';
+  return 'text-green-600';
+}
+
+function formatCurrency(value: number | null) {
+  if (value == null) return '-';
+  return `Rp ${Number(value).toLocaleString('id-ID')}`;
+}
 
 export default function DashboardPage() {
   const [dashData, setDashData] = useState<DashboardData | null>(null);
@@ -126,7 +153,7 @@ export default function DashboardPage() {
       <main className="flex min-h-screen bg-gray-100">
         <Sidebar />
 
-        <div className="flex-1 ml-64 p-8">
+        <div className="flex-1 min-w-0 ml-64 p-8">
           <Topbar />
 
           {/* Welcome */}
@@ -156,9 +183,9 @@ export default function DashboardPage() {
               </div>
             </Tooltip>
 
-            <Tooltip content="Aset yang siap digunakan kapan saja" position="bottom">
+            <Tooltip content="Aset yang sedang dalam proses maintenance" position="bottom">
               <div className="w-full">
-                <StatCard title="Available" value={statusCount(dashData, 'Available')} subtitle="Siap Digunakan" />
+                <StatCard title="Maintenance" value={statusCount(dashData, 'Maintenance')} subtitle="Dalam Perbaikan" />
               </div>
             </Tooltip>
 
@@ -304,13 +331,101 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* ACTIVITIES TABLE */}
-          <div
-            className="mt-6 animate-[enterUp_0.5s_0.48s_ease-out_both]"
-            data-tour="recent-activities"
-          >
-            <RecentActivities />
+          {/* ANALISIS LANJUTAN */}
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mt-6">
+            {/* ASSET INSIGHTS TABLE */}
+            <div className="xl:col-span-2 bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 animate-[enterUp_0.5s_0.48s_ease-out_both]">
+              <div className="mb-6">
+                <h2 className="text-xl font-semibold text-gray-800">Analisis Mendalam Aset</h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Sumber data yang sama dipakai AI untuk menyusun ringkasan di atas — diurutkan dari sisa umur (RUL) terendah.
+                </p>
+              </div>
+              <div className="overflow-x-auto scrollbar-hidden -mx-1 px-1">
+                <table className="w-full text-sm min-w-160">
+                  <thead>
+                    <tr className="text-left text-gray-400 text-xs uppercase">
+                      <th className="pb-3 font-medium">Aset</th>
+                      <th className="pb-3 font-medium">Status</th>
+                      <th className="pb-3 font-medium">RUL</th>
+                      <th className="pb-3 font-medium">Maintenance</th>
+                      <th className="pb-3 font-medium">Avg Downtime</th>
+                      <th className="pb-3 font-medium">Total Biaya</th>
+                      <th className="pb-3 font-medium">Severity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dashData?.asset_insights.slice(0, 6).map((a) => (
+                      <tr key={a.id} className="border-t border-gray-50">
+                        <td className="py-3 pr-3">
+                          <button onClick={() => setDetailAssetId(a.id)} className="font-medium text-gray-700 hover:text-blue-600 transition text-left">
+                            {a.name}
+                          </button>
+                          <p className="text-xs text-gray-400">{a.brand} · {a.category}</p>
+                        </td>
+                        <td className="py-3 pr-3">
+                          <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${MAINTENANCE_STATUS_CLASS[a.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                            {a.status}
+                          </span>
+                        </td>
+                        <td className={`py-3 pr-3 font-semibold whitespace-nowrap ${rulColor(a.predicted_rul)}`}>
+                          {a.predicted_rul != null ? `${a.predicted_rul} hari` : '-'}
+                        </td>
+                        <td className="py-3 pr-3 text-gray-600 whitespace-nowrap">{a.maintenance_count}x</td>
+                        <td className="py-3 pr-3 text-gray-600 whitespace-nowrap">{a.average_down_time != null ? `${a.average_down_time} jam` : '-'}</td>
+                        <td className="py-3 pr-3 text-gray-600 whitespace-nowrap">{formatCurrency(a.total_maintenance_cost)}</td>
+                        <td className="py-3 text-gray-600 whitespace-nowrap">{a.mode_severity ?? '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {dashData?.asset_insights.length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-6">Belum ada data analisis aset.</p>
+                )}
+                {!dashData && (
+                  <p className="text-sm text-gray-400 text-center py-6">Memuat...</p>
+                )}
+              </div>
+            </div>
+
+            {/* RECENT MAINTENANCE ACTIVITY */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 animate-[enterUp_0.5s_0.54s_ease-out_both]">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-gray-800">Aktivitas Maintenance Terbaru</h2>
+                <Tooltip content="Lihat seluruh riwayat maintenance">
+                  <Link href="/maintenance" className="text-blue-600 hover:text-blue-700 font-medium transition text-sm">
+                    Lihat Semua
+                  </Link>
+                </Tooltip>
+              </div>
+              <div className="space-y-4">
+                {dashData?.recent_maintenances.length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-6">Belum ada aktivitas maintenance.</p>
+                )}
+                {dashData?.recent_maintenances.map((m) => (
+                  <div key={m.id} className="flex items-start justify-between gap-3 border-b border-gray-50 pb-3 last:border-0 last:pb-0">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-gray-800 text-sm truncate">{m.asset_name}</h3>
+                      <p className="text-xs text-gray-500 mt-0.5 truncate">{m.maintenance_type} · {m.user_name}</p>
+                      <span className={`inline-flex mt-2 px-2.5 py-0.5 rounded-full text-xs font-medium ${MAINTENANCE_STATUS_CLASS[m.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                        {m.status}
+                      </span>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${SEVERITY_CLASS[m.severity] ?? 'bg-gray-100 text-gray-600'}`}>
+                        {m.severity}
+                      </span>
+                      {m.cost > 0 && <p className="text-xs text-gray-400 mt-2">{formatCurrency(m.cost)}</p>}
+                    </div>
+                  </div>
+                ))}
+                {!dashData && (
+                  <p className="text-sm text-gray-400 text-center py-6">Memuat...</p>
+                )}
+              </div>
+            </div>
           </div>
+
         </div>
 
         <AssetDetailPanel assetId={detailAssetId} onClose={() => setDetailAssetId(null)} />

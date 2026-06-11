@@ -35,6 +35,15 @@ body {
   overflow-x: hidden;
 }
 
+/* Keeps scroll behavior but hides the scrollbar track across browsers */
+.scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
 /* Custom Animations */
 @keyframes pageEnter {
   from { opacity: 0; }

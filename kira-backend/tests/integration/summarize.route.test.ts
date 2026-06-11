@@ -33,6 +33,12 @@ describe('POST /api/summarize', () => {
 
   beforeEach(() => {
     fetchSpy = jest.spyOn(global, 'fetch');
+    // /api/summarize now builds the same aggregated dashboard payload (buildDashboardData)
+    // before forwarding to the AI engine, so every $queryRaw / count call it makes needs
+    // a default resolved value — otherwise `.map()`/`[0]` on an unmocked `undefined` throws
+    // and the route's catch-all turns it into an unrelated 500.
+    prismaMock.asset.count.mockResolvedValue(0);
+    (prismaMock.$queryRaw as unknown as jest.Mock).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -71,6 +77,39 @@ describe('POST /api/summarize', () => {
     const sentBody = JSON.parse((options as RequestInit).body as string);
     expect(sentBody.company_id).toBe(testCompany.id);
     expect(sentBody.company_id).not.toBe('attacker-supplied-company-id');
+  });
+
+  it('forwards the dashboard-aggregated asset insights and critical count (NOT a fresh raw query)', async () => {
+    prismaMock.company.findFirst.mockResolvedValue(testCompany as any);
+    prismaMock.asset.count.mockResolvedValue(3);
+
+    const insightRow = {
+      id: 'a1', asset_name: 'AC Split Lobby', brand: 'Sharp', category: 'Mechanical',
+      status: 'Active', maintenance_count: 3, average_down_time: 12.5,
+      total_maintenance_cost: 1_500_000, max_maintenance_cost: 800_000,
+      mode_severity: 'normal', predicted_rul: 120, recorded_at: '2026-01-01T08:00:00.000Z',
+    };
+    (prismaMock.$queryRaw as unknown as jest.Mock).mockImplementation((strings: TemplateStringsArray) => {
+      const sql = strings.join('');
+      if (sql.includes('asset_prediction_history') && sql.includes('a.asset_name')) return Promise.resolve([insightRow]);
+      if (sql.includes('AS critical')) return Promise.resolve([{ critical: 2, high: 1, watch: 0 }]);
+      return Promise.resolve([]);
+    });
+    fetchSpy.mockResolvedValue(mockFetchResponse(true, 200, { summary: 'ok', assets: [] }));
+
+    await request(app).post('/api/summarize').set('Authorization', auth()).send({});
+
+    const [, options] = fetchSpy.mock.calls[0];
+    const sentBody = JSON.parse((options as RequestInit).body as string);
+    expect(sentBody.critical_count).toBe(2);
+    expect(sentBody.assets).toEqual([
+      {
+        id: 'a1', name: 'AC Split Lobby', brand: 'Sharp', category: 'Mechanical', status: 'Active',
+        maintenance_count: 3, average_down_time: 12.5, total_maintenance_cost: 1_500_000,
+        max_maintenance_cost: 800_000, mode_severity: 'normal', predicted_rul: 120,
+        recorded_at: '2026-01-01T08:00:00.000Z',
+      },
+    ]);
   });
 
   it('defaults limit to 10 and temperature to 0.2 when not provided', async () => {
