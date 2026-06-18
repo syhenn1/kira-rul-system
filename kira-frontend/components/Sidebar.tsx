@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import React, { useState } from 'react';
+import React from 'react';
 import { authApi } from '@/lib/auth';
 
 import {
@@ -13,46 +13,85 @@ import {
   Bell,
   FileText,
   Settings,
-  ChevronDown,
   Building2,
   LogOut,
+  Bot,
+  Home,
+  Menu,
+  PanelLeftClose,
 } from 'lucide-react';
 
 type MenuItem = {
   name: string;
   href: string;
   icon: React.ElementType;
-  children?: { name: string; href: string; icon?: React.ElementType }[];
+  badge?: number;
+  children?: {
+    name: string;
+    href: string;
+    icon?: React.ElementType;
+  }[];
 };
 
 const menus: MenuItem[] = [
   {
     name: 'Dashboard',
-    icon: LayoutDashboard,
     href: '/dashboard',
+    icon: LayoutDashboard,
   },
   {
     name: 'Assets',
-    icon: Boxes,
     href: '/assets',
+    icon: Boxes,
+    children: [
+      {
+        name: 'Asset List',
+        href: '/assets',
+      },
+      {
+        name: 'Categories',
+        href: '/assets/categories',
+      },
+    ],
   },
   {
     name: 'Maintenance',
-    icon: Wrench,
     href: '/maintenance',
+    icon: Wrench,
   },
-  { name: 'Gedung', icon: Building2, href: '/gedung' },
-  { name: 'Teknisi', icon: HardHat, href: '/users' },
-  { name: 'Alerts', icon: Bell, href: '/alerts' },
-  { name: 'Reports', icon: FileText, href: '/reports' },
-  { name: 'Settings', icon: Settings, href: '/settings' },
+  {
+    name: 'Gedung',
+    href: '/gedung',
+    icon: Building2,
+  },
+  {
+    name: 'Teknisi',
+    href: '/users',
+    icon: HardHat,
+  },
+  {
+    name: 'Alerts',
+    href: '/alerts',
+    icon: Bell,
+    badge: 3,
+  },
+  {
+    name: 'Reports',
+    href: '/reports',
+    icon: FileText,
+  },
+  {
+    name: 'Settings',
+    href: '/settings',
+    icon: Settings,
+  },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-
-  const [openMenus, setOpenMenus] = useState<{ [key: string]: boolean }>({
+  const [collapsed, setCollapsed] = React.useState(false);
+  const [openMenus, setOpenMenus] = React.useState({
     Assets: pathname.startsWith('/assets'),
     Maintenance: pathname.startsWith('/maintenance'),
   });
@@ -63,106 +102,133 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 w-64 h-screen bg-[#18181B] text-white p-6 flex flex-col overflow-y-auto">
+    <aside
+      className={`fixed left-4 top-4 bottom-4 bg-white rounded-[30px] shadow-2xl border border-slate-200 flex flex-col overflow-hidden transition-all duration-300 ease-in-out z-40 ${
+        collapsed ? 'w-[82px]' : 'w-64'
+      }`}
+    >
+      {/* Collapse Button */}
+      <div className={`absolute top-5 z-50 transition-all duration-300 ${collapsed ? 'right-6' : 'right-5'}`}>
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="rounded-xl p-2 hover:bg-slate-100/20 text-white transition-colors"
+        >
+          {collapsed ? (
+            <Menu size={20} />
+          ) : (
+            <PanelLeftClose size={20} />
+          )}
+        </button>
+      </div>
 
-      {/* LOGO */}
-      <Link href="/">
-        <div className="flex items-center gap-3 cursor-pointer group">
-          <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-500 transition-colors">
-            <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="white" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 7L12 3L4 7M20 7L12 11M20 7V17L12 21M12 11L4 7M12 11V21M4 7V17L12 21" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-base font-bold tracking-widest leading-none group-hover:text-blue-400 transition-colors">
+      {/* HEADER */}
+      <div className="bg-gradient-to-b from-[#07152F] to-[#16213E] pb-8 transition-all duration-300">
+        <div className="flex flex-col items-center pt-8">
+          <Link href="/">
+            <div
+              className={`rounded-3xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-xl transition-all duration-300 ${
+                collapsed ? 'w-12 h-12 mt-2' : 'w-20 h-20'
+              }`}
+            >
+              <span
+                className={`text-white font-bold transition-all duration-300 ${
+                  collapsed ? 'text-2xl' : 'text-4xl'
+                }`}
+              >
+                K
+              </span>
+            </div>
+          </Link>
+
+          {/* Sembunyikan teks saat collapsed */}
+          <div
+            className={`flex flex-col items-center transition-all duration-300 overflow-hidden ${
+              collapsed ? 'opacity-0 h-0 mt-0' : 'opacity-100 h-auto mt-5'
+            }`}
+          >
+            <h1 className="text-4xl font-bold tracking-[0.25em] text-white whitespace-nowrap">
               KIRA
             </h1>
-            <p className="text-gray-500 text-xs mt-0.5">Asset Management</p>
+            <p className="text-slate-300 text-sm mt-1 whitespace-nowrap">
+              AI Asset Management
+            </p>
           </div>
         </div>
-      </Link>
+      </div>
 
       {/* MENU */}
-      <nav className="mt-10 flex flex-col gap-1">
+      <nav className="flex-1 px-4 py-5 space-y-2 overflow-y-auto overflow-x-hidden">
         {menus.map((menu) => {
           const Icon = menu.icon;
+
           const isActive =
-            pathname === menu.href || pathname.startsWith(menu.href + '/');
+            pathname === menu.href ||
+            pathname.startsWith(menu.href + '/');
 
           return (
-            <div key={menu.name}>
-              <div
-                onClick={() => {
-                  if (menu.children) {
-                    setOpenMenus((prev) => ({
-                      ...prev,
-                      [menu.name]: !prev[menu.name],
-                    }));
-                  }
-                }}
-              >
-                <Link
-                  href={menu.href}
-                  className={`flex items-center justify-between px-3 py-2.5 rounded-xl transition-all duration-200 ${
+            <Link
+              key={menu.name}
+              href={menu.href}
+              className={`group flex items-center justify-between rounded-2xl px-3 py-3 transition-all duration-300 ${
+                isActive
+                  ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
+                  : 'text-slate-600 hover:bg-slate-100'
+              } ${collapsed ? 'justify-center' : ''}`}
+              title={collapsed ? menu.name : ''} // Tambahkan tooltip saat ditutup
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`min-w-[40px] h-10 rounded-xl flex items-center justify-center transition-colors ${
                     isActive
-                      ? 'bg-blue-600 text-white shadow-lg'
-                      : 'text-gray-400 hover:bg-white/8 hover:text-white'
+                      ? 'bg-white/20'
+                      : 'bg-slate-100 group-hover:bg-white'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <Icon size={18} />
-                    <span className="text-sm font-medium">{menu.name}</span>
-                  </div>
+                  <Icon size={18} />
+                </div>
 
-                  {menu.children && (
-                    <ChevronDown
-                      size={14}
-                      className={`transition-transform duration-200 ${
-                        openMenus[menu.name] ? 'rotate-180' : ''
-                      }`}
-                    />
-                  )}
-                </Link>
+                <span
+                  className={`font-medium whitespace-nowrap transition-all duration-300 ${
+                    collapsed ? 'opacity-0 w-0 hidden' : 'opacity-100 w-auto'
+                  }`}
+                >
+                  {menu.name}
+                </span>
               </div>
 
-              {menu.children && openMenus[menu.name] && (
-                <div className="ml-5 mt-1 flex flex-col gap-0.5">
-                  {menu.children.map((child) => {
-                    const isChildActive = pathname === child.href;
-                    return (
-                      <Link
-                        key={child.name}
-                        href={child.href}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
-                          isChildActive
-                            ? 'bg-white/10 text-white'
-                            : 'text-gray-500 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        {child.icon ? (
-                          <child.icon size={14} />
-                        ) : (
-                          <Building2 size={14} />
-                        )}
-                        {child.name}
-                      </Link>
-                    );
-                  })}
+              {'badge' in menu && menu.badge && !collapsed && (
+                <div
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                    isActive
+                      ? 'bg-white text-purple-600'
+                      : 'bg-purple-100 text-purple-700'
+                  }`}
+                >
+                  {menu.badge}
                 </div>
               )}
-            </div>
+            </Link>
           );
         })}
       </nav>
 
       {/* LOGOUT */}
-      <div className="mt-auto pt-6 border-t border-white/10">
+      <div className="p-4 border-t border-slate-200">
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-400 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200"
+          className={`flex items-center justify-center gap-3 rounded-2xl border border-purple-200 py-3 text-purple-600 hover:bg-gradient-to-r hover:from-blue-500 hover:to-purple-600 hover:text-white transition-all ${
+            collapsed ? 'w-full px-0' : 'w-full px-4'
+          }`}
+          title={collapsed ? 'Logout' : ''}
         >
-          <LogOut size={18} />
-          <span className="text-sm font-medium">Logout</span>
+          <LogOut size={18} className="shrink-0" />
+          <span
+            className={`font-medium whitespace-nowrap transition-all duration-300 ${
+              collapsed ? 'opacity-0 w-0 hidden' : 'opacity-100 w-auto'
+            }`}
+          >
+            Logout
+          </span>
         </button>
       </div>
     </aside>

@@ -60,17 +60,17 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen bg-black relative overflow-hidden flex items-center justify-center px-6">
+    <main className="min-h-screen bg-gradient-to-br from-slate-100 via-purple-50 to-pink-50 relative overflow-hidden flex items-center justify-center px-6">
 
       <Link
         href="/"
-        className="absolute top-6 left-6 z-20 flex items-center gap-2 text-white/80 hover:text-white transition bg-white/10 px-4 py-2 rounded-xl backdrop-blur-md border border-white/10"
+        className="absolute top-6 left-6 z-20 flex items-center gap-2 text-black/80 hover:text-black transition bg-white/10 px-4 py-2 rounded-xl backdrop-blur-md border border-white/10"
       >
         ← Back to Home
       </Link>
 
       {/* BACKGROUND */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-900/30 via-black to-purple-900/30" />
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-100 via-purple-50 to-pink-50" />
       <div className="absolute w-[500px] h-[500px] bg-blue-600/20 blur-[120px] rounded-full top-[-100px] left-[-100px]" />
       <div className="absolute w-[500px] h-[500px] bg-purple-600/20 blur-[120px] rounded-full bottom-[-100px] right-[-100px]" />
 
@@ -78,17 +78,17 @@ export default function LoginPage() {
       <div className="relative z-10 w-full max-w-6xl bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl grid grid-cols-1 lg:grid-cols-2">
 
         {/* LEFT */}
-        <div className="p-12 flex flex-col justify-between bg-gradient-to-br from-blue-950/80 to-black">
+        <div className="p-12 flex flex-col justify-between bg-gradient-to-br from-white-950/80 to-purple">
           <div>
-            <h1 className="text-4xl font-bold text-white">KIRA</h1>
-            <p className="text-gray-400 mt-2">Intelligent Asset Management</p>
+            <h1 className="text-4xl font-bold text-black">KIRA</h1>
+            <p className="text-black-400 mt-2">Intelligent Asset Management</p>
           </div>
 
           <div className="mt-16 transition-all duration-500">
-            <h2 className="text-5xl font-bold leading-tight text-white">
+            <h2 className="text-5xl font-bold leading-tight text-black">
               {slides[currentSlide].title}
             </h2>
-            <p className="text-gray-400 mt-6 text-lg leading-relaxed">
+            <p className="text-black-400 mt-6 text-lg leading-relaxed">
               {slides[currentSlide].desc}
             </p>
           </div>
@@ -106,10 +106,10 @@ export default function LoginPage() {
         </div>
 
         {/* RIGHT */}
-        <div className="p-12 flex flex-col justify-center bg-black/30">
+        <div className="p-12 flex flex-col justify-center bg-white">
           <div>
-            <h2 className="text-4xl font-bold text-white">Welcome Back</h2>
-            <p className="text-gray-400 mt-3">Login to continue accessing your dashboard</p>
+            <h2 className="text-4xl font-bold text-black">Welcome Back</h2>
+            <p className="text-bold gray-400 mt-3">Login to continue accessing your dashboard</p>
           </div>
 
           {/* GOOGLE LOGIN */}
