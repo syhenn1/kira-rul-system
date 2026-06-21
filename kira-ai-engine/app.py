@@ -472,13 +472,16 @@ class AssetInput(BaseModel):
 
 class SummarizeRequest(BaseModel):
     company_id: Optional[str] = None
-    # Per-asset insight records lifted straight from the backend's aggregated dashboard
-    # payload (`asset_insights` in /api/dashboard) — the summarizer reads THIS, not Postgres,
-    # so its narrative always matches what the user sees on the dashboard.
+    # Per-asset insight records from the frontend's live dashboard snapshot
     assets: Optional[List[dict]] = None
     critical_count: Optional[int] = 0
     limit: Optional[int] = 10
     temperature: Optional[float] = 0.2
+    # Full dashboard context — matches exactly what the user sees on screen
+    stats: Optional[dict] = None
+    monthly_trend: Optional[List[dict]] = None
+    by_category: Optional[List[dict]] = None
+    upcoming_maintenances: Optional[List[dict]] = None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -717,6 +720,10 @@ def summarize(req: SummarizeRequest):
             critical_count=req.critical_count or 0,
             limit=req.limit,
             temperature=req.temperature,
+            stats=req.stats,
+            monthly_trend=req.monthly_trend,
+            by_category=req.by_category,
+            upcoming_maintenances=req.upcoming_maintenances,
         )
         if isinstance(summary, dict) and "summary" in summary:
             return {

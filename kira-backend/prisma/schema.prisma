@@ -18,11 +18,29 @@ model User {
   profile_picture String?
   phone           String?
   department      String?
+  role            String   @default("member") // 'admin', 'member', 'teknisi'
 
-  ownedCompanies       Company[]        @relation("CompanyOwner")
-  memberships          CompanyMember[]
-  maintenances         Maintenance[]    // sebagai pembuat / id_user
-  createdLogs          MaintenanceLog[] @relation("MaintenanceLogCreator")
+  // Teknisi-specific fields (only populated when role = 'teknisi')
+  specialization   String?
+  teknisi_status   String?  // 'Tersedia', 'Ditugaskan', 'Tidak Aktif'
+  experience_years Int?     @default(0)
+
+  id_perusahaan   String?
+  company         Company?         @relation("UserDirectCompany", fields: [id_perusahaan], references: [id])
+
+  ownedCompanies  Company[]
+  memberships     CompanyMember[]
+  maintenances    Maintenance[]    // sebagai pembuat / id_user
+  createdLogs     MaintenanceLog[] @relation("MaintenanceLogCreator")
+
+  // Relations when acting as teknisi
+  teknisiMaintenances          Maintenance[]    @relation("MaintenanceTechnician")
+  teknisiAssignedMaintenances  Maintenance[]    @relation("AssignedTechnician")
+  teknisiLogs                  MaintenanceLog[] @relation("MaintenanceLogTechnician")
+
+  // Ticket relations
+  reportedTickets Ticket[] @relation("TicketReporter")
+  assignedTickets Ticket[] @relation("TicketAssigned")
 
   @@map("users")
 }
@@ -33,11 +51,12 @@ model Company {
   license_status String
   owner_id       String
 
-  owner       User            @relation("CompanyOwner", fields: [owner_id], references: [id])
+  owner       User            @relation(fields: [owner_id], references: [id])
   members     CompanyMember[]
   assets      Asset[]
-  technicians Technician[]
   gedung      Gedung[]
+  tickets     Ticket[]
+  direktUsers User[]          @relation("UserDirectCompany")
 
   @@map("companies")
 }
@@ -92,6 +111,7 @@ model Asset {
   tipe               Tipe?                    @relation(fields: [tipe_id], references: [id])
   maintenances       Maintenance[]
   prediction_history AssetPredictionHistory[]
+  tickets            Ticket[]
 
   @@map("assets")
 }
@@ -133,26 +153,27 @@ model Tipe {
 }
 
 model Maintenance {
-  id                     String    @id @default(uuid())
+  id                     String   @id @default(uuid())
   id_asset               String
   id_user                String
-  id_teknisi             String?   // FK ke tabel technicians (teknisi yang ditugaskan)
-  assigned_technician_id String?   // FK ke tabel technicians (teknisi pelaksana terbaru, dicatat dari status log)
+  id_teknisi             String?  // FK ke users (role='teknisi') — teknisi yang ditugaskan
+  assigned_technician_id String?  // FK ke users (role='teknisi') — teknisi pelaksana terbaru dari log
   maintenance_type       String
-  severity               String    // Low, Medium, High, Critical
-  down_time              Int       @default(0)
-  cost                   Float     @default(0.0)
+  severity               String   // Low, Medium, High, Critical
+  down_time              Int      @default(0)
+  cost                   Float    @default(0.0)
   jenis_kerusakan        String?
   penyebab               String?
   spare_part_digunakan   String?
-  created_at             DateTime  @default(now())
+  created_at             DateTime @default(now())
 
   asset              Asset                    @relation(fields: [id_asset], references: [id])
   user               User                     @relation(fields: [id_user], references: [id])
-  assignedTechnician Technician?              @relation("AssignedTechnician", fields: [assigned_technician_id], references: [id])
-  technician         Technician?              @relation("MaintenanceTechnician", fields: [id_teknisi], references: [id])
+  assignedTechnician User?                    @relation("AssignedTechnician", fields: [assigned_technician_id], references: [id])
+  teknisi            User?                    @relation("MaintenanceTechnician", fields: [id_teknisi], references: [id])
   logs               MaintenanceLog[]
   prediction_history AssetPredictionHistory[]
+  ticket             Ticket?
 
   @@map("maintenances")
 }
@@ -161,7 +182,7 @@ model MaintenanceLog {
   id             String   @id @default(uuid())
   id_maintenance String
   id_user        String
-  technician_id  String?
+  technician_id  String?  // FK ke users (role='teknisi')
   status         String
   note           String
   down_time      Int      @default(0)
@@ -170,28 +191,35 @@ model MaintenanceLog {
 
   maintenance Maintenance @relation(fields: [id_maintenance], references: [id])
   user        User        @relation("MaintenanceLogCreator", fields: [id_user], references: [id])
-  technician  Technician? @relation("MaintenanceLogTechnician", fields: [technician_id], references: [id])
+  teknisi     User?       @relation("MaintenanceLogTechnician", fields: [technician_id], references: [id])
 
   @@map("maintenance_logs")
 }
 
-model Technician {
-  id               String   @id @default(uuid())
-  id_perusahaan    String
-  name             String
-  email            String   @unique
-  phone            String?
-  specialization   String   // Mekanikal, Elektrikal, Sipil, HVAC, dll.
-  status           String   @default("Tersedia") // Tersedia, Ditugaskan, Tidak Aktif
-  experience_years Int      @default(0)
-  created_at       DateTime @default(now())
+model Ticket {
+  id            String    @id @default(uuid())
+  id_perusahaan String
+  id_asset      String
+  id_reporter   String    // FK ke users (pembuat ticket)
+  id_assigned   String?   // FK ke users (role='teknisi', yang ditugaskan)
 
-  company              Company          @relation(fields: [id_perusahaan], references: [id])
-  maintenances         Maintenance[]    @relation("MaintenanceTechnician")
-  assignedMaintenances Maintenance[]    @relation("AssignedTechnician")
-  logs                 MaintenanceLog[] @relation("MaintenanceLogTechnician")
+  title         String
+  description   String
+  priority      String    @default("Medium") // 'Low', 'Medium', 'High', 'Critical'
+  status        String    @default("Open")   // 'Open', 'In Progress', 'Resolved', 'Closed'
 
-  @@map("technicians")
+  maintenance_id String?  @unique  // FK ke maintenances (jika maintenance dibuat dari ticket)
+  resolved_at   DateTime?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  company     Company      @relation(fields: [id_perusahaan], references: [id])
+  asset       Asset        @relation(fields: [id_asset], references: [id])
+  reporter    User         @relation("TicketReporter", fields: [id_reporter], references: [id])
+  assigned    User?        @relation("TicketAssigned", fields: [id_assigned], references: [id])
+  maintenance Maintenance? @relation(fields: [maintenance_id], references: [id])
+
+  @@map("tickets")
 }
 
 model AssetPredictionHistory {

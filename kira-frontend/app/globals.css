@@ -146,6 +146,61 @@ body {
   100% { transform: scale(1)   rotate(0deg);  opacity: 1; }
 }
 
+/* Spacer — sits in flex flow to reserve sidebar width; flex-1 content fills the rest */
+.sb-spacer {
+  flex-shrink: 0;
+  width: 288px; /* 16px left gap + 256px card + 16px right gap */
+  transition: width 0.3s ease-in-out;
+}
+body.sb-collapsed .sb-spacer {
+  width: 114px; /* 16px left gap + 82px card + 16px right gap */
+}
+
+/* Content — no manual margin needed, spacer handles the layout gap */
+.sb-content {
+  margin-left: 0;
+  transition: none;
+}
+body.sb-collapsed .sb-content {
+  margin-left: 0;
+}
+
+/* Mobile: hide spacer (no sidebar), pad bottom for bottom nav */
+@media (max-width: 767px) {
+  .sb-spacer { display: none; }
+  .sb-content { padding-bottom: 5rem; }
+}
+
+/* Detail panel slide-in/out from right */
+@keyframes slideInFromRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes slideOutToRight {
+  from { transform: translateX(0);    opacity: 1; }
+  to   { transform: translateX(100%); opacity: 0; }
+}
+@keyframes fadeInBg {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes fadeOutBg {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+.panel-slide-in {
+  animation: slideInFromRight 0.28s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.panel-slide-out {
+  animation: slideOutToRight 0.25s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.panel-bg-fade {
+  animation: fadeInBg 0.2s ease-out both;
+}
+.panel-bg-fade-out {
+  animation: fadeOutBg 0.2s ease-out both;
+}
+
 /* Glassmorphism utilities */
 .glass {
   background: rgba(255, 255, 255, 0.03);

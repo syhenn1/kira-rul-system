@@ -87,7 +87,7 @@ class ExplicitNLPPipeline:
         
         return features
 
-def build_prompt(rows, critical_count=0):
+def build_prompt(rows, critical_count=0, stats=None, monthly_trend=None, by_category=None, upcoming_maintenances=None):
     prioritas_tinggi = []
     normal = []
     
@@ -193,7 +193,26 @@ def build_prompt(rows, critical_count=0):
         "[PRIORITAS TINGGI], karena daftar tersebut hanya sampel aset dengan RUL terendah, bukan jumlah total perusahaan.\n"
     )
 
+    # Build dashboard overview context from what the user sees on screen
+    dashboard_lines = []
+    if stats:
+        total = stats.get('total', '?')
+        by_status = stats.get('by_status', [])
+        status_parts = [f"{s['status']}: {s['count']}" for s in by_status if s.get('count', 0) > 0]
+        dashboard_lines.append(f"Total aset: {total} ({', '.join(status_parts)})")
+    if monthly_trend:
+        trend_parts = [f"{t.get('month','?')}: {t.get('count',0)}" for t in monthly_trend[-6:]]
+        dashboard_lines.append(f"Tren maintenance 6 bulan terakhir: {', '.join(trend_parts)}")
+    if by_category:
+        cat_parts = [f"{c.get('category','?')}: {c.get('count',0)}" for c in by_category[:8]]
+        dashboard_lines.append(f"Distribusi kategori aset: {', '.join(cat_parts)}")
+    if upcoming_maintenances:
+        up_parts = [f"{m.get('asset_name','?')} ({m.get('status','?')}, {m.get('severity','?')})" for m in upcoming_maintenances[:5]]
+        dashboard_lines.append(f"Maintenance aktif/terjadwal: {', '.join(up_parts)}")
+    dashboard_context = '\n'.join(dashboard_lines) if dashboard_lines else "(tidak tersedia)"
+
     prompt_data = (
+        f"[RINGKASAN DASHBOARD — data yang tampil di layar pengguna]\n{dashboard_context}\n\n"
         f"[FAKTA SISTEM]\nJumlah total aset berstatus CRITICAL (RUL ≤ 180 hari) di seluruh perusahaan: {critical_count}\n\n"
         f"[Top Keywords dari data aset]: {top_keywords}\n\n"
         f"[PRIORITAS TINGGI — aset yang memerlukan perhatian segera]\n{teks_prioritas}\n\n"
@@ -236,14 +255,9 @@ _MODEL_CANDIDATES = [
 ]
 
 
-def summarize_company_assets(assets, critical_count: int = 0, limit: int = 20, temperature: float = 0.2):
-    """Generate an executive summary from the company's aggregated dashboard data.
-
-    `assets` is the `asset_insights` list from the backend's /api/dashboard payload
-    (already ordered by predicted_rul ascending) — the same business-process view
-    rendered on screen. We deliberately take this as input instead of querying
-    Postgres ourselves, so the AI's narrative is always consistent with the dashboard.
-    """
+def summarize_company_assets(assets, critical_count: int = 0, limit: int = 20, temperature: float = 0.2,
+                              stats=None, monthly_trend=None, by_category=None, upcoming_maintenances=None):
+    """Generate an executive summary from the full dashboard snapshot the user sees on screen."""
     HF_TOKEN = os.getenv("HF_TOKEN")
     if not HF_TOKEN:
         raise RuntimeError("HF_TOKEN not set in environment")
@@ -252,7 +266,14 @@ def summarize_company_assets(assets, critical_count: int = 0, limit: int = 20, t
     if not rows:
         return {"summary": "Tidak ada data aset untuk diringkas.", "assets": [], "critical_count": 0}
 
-    messages, assets_data = build_prompt(rows, critical_count=critical_count)
+    messages, assets_data = build_prompt(
+        rows,
+        critical_count=critical_count,
+        stats=stats,
+        monthly_trend=monthly_trend,
+        by_category=by_category,
+        upcoming_maintenances=upcoming_maintenances,
+    )
     url = HF_ROUTER_URL
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
