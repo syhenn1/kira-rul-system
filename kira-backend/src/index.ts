@@ -2,18 +2,74 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import express, { Request, Response } from 'express';
+import http from 'http';
 import cors from 'cors';
 import passport from 'passport';
+import { WebSocketServer, WebSocket } from 'ws';
 import './passport.config';
 import authRoutes from './auth/auth.routes';
 import { authenticateJWT } from './middleware/auth.middleware';
 import prisma from './lib/prisma';
+import bcrypt from 'bcryptjs';
 
 const app = express();
+const httpServer = http.createServer(app);
+
+// ── WebSocket server ─────────────────────────────────────────────────────────
+const wss = new WebSocketServer({ server: httpServer });
+
+// Map companyId → active WebSocket clients in that company's "room"
+const wsRooms = new Map<string, Set<WebSocket>>();
+
+export function wsBroadcast(companyId: string, event: string, data: unknown) {
+  const msg = JSON.stringify({ event, data });
+  const clients = wsRooms.get(companyId);
+  if (!clients) return;
+  clients.forEach((ws) => {
+    if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+  });
+}
+
+wss.on('connection', (ws) => {
+  ws.on('message', async (raw) => {
+    try {
+      const msg = JSON.parse(raw.toString());
+      // Client sends { type:'auth', token:'...' } → server verifies JWT and joins company room
+      if (msg.type === 'auth' && msg.token) {
+        const jwt = await import('jsonwebtoken');
+        const payload = jwt.default.verify(msg.token, process.env.JWT_SECRET || 'kira_secret_key') as any;
+        const userId = payload.id || payload.sub;
+        const company = await findUserCompany(userId);
+        if (company) {
+          if (!wsRooms.has(company.id)) wsRooms.set(company.id, new Set());
+          wsRooms.get(company.id)!.add(ws);
+          ws.send(JSON.stringify({ event: 'connected', data: { companyId: company.id } }));
+        }
+      }
+    } catch { /* invalid token or parse error — ignore */ }
+  });
+
+  ws.on('close', () => {
+    wsRooms.forEach((clients) => clients.delete(ws));
+  });
+});
+
+const isLocalNetworkOrigin = (origin: string) =>
+  /^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(origin);
 
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      const allowed = (process.env.FRONTEND_URL || 'http://localhost:3000')
+        .split(',')
+        .map((u) => u.trim());
+      // Allow: no-origin requests, configured origins, and local network IPs (for mobile dev access)
+      if (!origin || allowed.some((u) => origin.startsWith(u)) || isLocalNetworkOrigin(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+      }
+    },
     credentials: true,
   })
 );
@@ -22,8 +78,28 @@ app.use(passport.initialize());
 
 const PORT = process.env.PORT || 3001;
 
-// ── Helper: find user's company (owner OR member) ────────────────────────────
+// ── Helper: Prisma company filter — owner OR member OR direct FK (teknisi) ───
+function companyFilter(userId: string) {
+  return {
+    OR: [
+      { owner_id:   userId },
+      { members:     { some: { id_user: userId } } },
+      { direktUsers: { some: { id: userId } } },
+    ],
+  };
+}
+
+// ── Helper: find user's company (direct FK → owner → CompanyMember) ─────────
 async function findUserCompany(userId: string) {
+  // Priority 1: direct id_perusahaan on the user row (set for teknisi)
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id_perusahaan: true },
+  });
+  if (user?.id_perusahaan) {
+    return prisma.company.findUnique({ where: { id: user.id_perusahaan } });
+  }
+  // Priority 2: owner or CompanyMember (admin / regular member)
   return prisma.company.findFirst({
     where: {
       OR: [
@@ -58,13 +134,24 @@ function deriveMaintenanceFields(logs: any[] | undefined | null) {
   };
 }
 
-function withDerivedMaintenanceFields<T extends { logs?: any[] }>(maintenance: T): T & {
-  status: string;
-  scheduled_date: Date | null;
-  start_date: Date | null;
-  completion_date: Date | null;
-} {
-  return { ...maintenance, ...deriveMaintenanceFields(maintenance.logs) };
+function withDerivedMaintenanceFields<T extends { logs?: any[]; teknisi?: any; assignedTechnician?: any }>(maintenance: T) {
+  const result: any = { ...maintenance, ...deriveMaintenanceFields(maintenance.logs) };
+  // Alias 'teknisi' → 'technician' for frontend backward-compat
+  if ('teknisi' in result) result.technician = result.teknisi;
+  // Alias assignedTechnician.teknisi_status → status for backward-compat
+  if (result.assignedTechnician?.teknisi_status !== undefined) {
+    result.assignedTechnician = { ...result.assignedTechnician, status: result.assignedTechnician.teknisi_status };
+  }
+  // Same alias in logs
+  if (Array.isArray(result.logs)) {
+    result.logs = result.logs.map((log: any) => {
+      const l = { ...log };
+      if ('teknisi' in l) l.technician = l.teknisi;
+      if (l.technician?.teknisi_status !== undefined) l.technician = { ...l.technician, status: l.technician.teknisi_status };
+      return l;
+    });
+  }
+  return result;
 }
 
 // Auth routes
@@ -93,12 +180,7 @@ app.get('/api/assets', authenticateJWT, async (req: Request, res: Response) => {
     const criticalityText = String(criticality).trim();
     const gedungIdText    = String(gedung_id).trim();
 
-    const companyWhere = {
-      OR: [
-        { owner_id: userId },
-        { members: { some: { id_user: userId } } },
-      ],
-    };
+    const companyWhere = companyFilter(userId);
 
     // Build Prisma WHERE using AND so multiple conditions compose correctly
     const andClauses: any[] = [];
@@ -249,12 +331,7 @@ app.get('/api/assets/:id', authenticateJWT, async (req: Request, res: Response) 
     const asset = await prisma.asset.findFirst({
       where: {
         id,
-        company: {
-          OR: [
-            { owner_id: userId },
-            { members: { some: { id_user: userId } } },
-          ],
-        },
+        company: companyFilter(userId),
       },
       include: {
         gedung:      true,
@@ -427,14 +504,7 @@ app.post('/api/assets', authenticateJWT, async (req: Request, res: Response) => 
     const finalStatus = status || 'Active';
 
     const userId = (req as any).user.id;
-    const userCompany = await prisma.company.findFirst({
-      where: {
-        OR: [
-          { owner_id: userId },
-          { members: { some: { id_user: userId } } },
-        ],
-      },
-    });
+    const userCompany = await findUserCompany(userId);
 
     if (!userCompany) {
       return res.status(400).json({ error: 'User does not belong to any company. Please contact your administrator.' });
@@ -614,16 +684,7 @@ app.get('/api/maintenances', authenticateJWT, async (req: Request, res: Response
 
     const where: any = {
       AND: [
-        {
-          asset: {
-            company: {
-              OR: [
-                { owner_id: userId },
-                { members: { some: { id_user: userId } } },
-              ],
-            },
-          },
-        },
+        { asset: { company: companyFilter(userId) } },
       ],
     };
 
@@ -661,9 +722,9 @@ app.get('/api/maintenances', authenticateJWT, async (req: Request, res: Response
           select: { id: true, name: true, email: true },
         },
         assignedTechnician: {
-          select: { id: true, name: true, email: true, specialization: true, phone: true, status: true },
+          select: { id: true, name: true, email: true, specialization: true, phone: true, teknisi_status: true },
         },
-        technician: {
+        teknisi: {
           select: { id: true, name: true, email: true, specialization: true, phone: true },
         },
         logs: {
@@ -672,8 +733,8 @@ app.get('/api/maintenances', authenticateJWT, async (req: Request, res: Response
             user: {
               select: { id: true, name: true, email: true },
             },
-            technician: {
-              select: { id: true, name: true, email: true, specialization: true, phone: true, status: true },
+            teknisi: {
+              select: { id: true, name: true, email: true, specialization: true, phone: true, teknisi_status: true },
             },
           },
         },
@@ -751,12 +812,7 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
     const asset = await prisma.asset.findFirst({
       where: {
         id: id_asset,
-        company: {
-          OR: [
-            { owner_id: userId },
-            { members: { some: { id_user: userId } } },
-          ],
-        },
+        company: companyFilter(userId),
       },
       include: { gedung: true, merk: true, kategori: true, subKategori: true, tipe: true },
     });
@@ -916,16 +972,16 @@ app.post('/api/maintenances', authenticateJWT, async (req: Request, res: Respons
       where: { id: newMaintenance.id },
       include: {
         assignedTechnician: {
-          select: { id: true, name: true, email: true, specialization: true, phone: true, status: true }
+          select: { id: true, name: true, email: true, specialization: true, phone: true, teknisi_status: true }
         },
-        technician: {
+        teknisi: {
           select: { id: true, name: true, email: true, specialization: true, phone: true }
         },
         logs: {
           orderBy: { created_at: 'asc' },
           include: {
             user: { select: { id: true, name: true, email: true } },
-            technician: { select: { id: true, name: true, email: true } }
+            teknisi: { select: { id: true, name: true, email: true } }
           }
         }
       }
@@ -963,14 +1019,7 @@ app.patch('/api/maintenances/:id', authenticateJWT, async (req: Request, res: Re
     const maintenance = await prisma.maintenance.findFirst({
       where: {
         id,
-        asset: {
-          company: {
-            OR: [
-              { owner_id: userId },
-              { members: { some: { id_user: userId } } },
-            ],
-          },
-        },
+        asset: { company: companyFilter(userId) },
       },
     });
 
@@ -980,15 +1029,7 @@ app.patch('/api/maintenances/:id', authenticateJWT, async (req: Request, res: Re
 
     if (id_asset && id_asset !== maintenance.id_asset) {
       const accessibleAsset = await prisma.asset.findFirst({
-        where: {
-          id: id_asset,
-          company: {
-            OR: [
-              { owner_id: userId },
-              { members: { some: { id_user: userId } } },
-            ],
-          },
-        },
+        where: { id: id_asset, company: companyFilter(userId) },
         select: { id: true },
       });
 
@@ -1020,13 +1061,13 @@ app.patch('/api/maintenances/:id', authenticateJWT, async (req: Request, res: Re
       include: {
         asset: true,
         user: { select: { id: true, name: true, email: true } },
-        assignedTechnician: { select: { id: true, name: true, email: true, specialization: true, phone: true, status: true } },
-        technician: { select: { id: true, name: true, email: true, specialization: true, phone: true } },
+        assignedTechnician: { select: { id: true, name: true, email: true, specialization: true, phone: true, teknisi_status: true } },
+        teknisi: { select: { id: true, name: true, email: true, specialization: true, phone: true } },
         logs: {
           orderBy: { created_at: 'asc' },
           include: {
             user: { select: { id: true, name: true, email: true } },
-            technician: { select: { id: true, name: true, email: true } },
+            teknisi: { select: { id: true, name: true, email: true } },
           },
         },
         prediction_history: { orderBy: { recorded_at: 'desc' } },
@@ -1069,7 +1110,8 @@ app.post('/api/maintenances/:id/logs', authenticateJWT, async (req: Request, res
           include: {
             company: {
               include: {
-                members: true,
+                members:     true,
+                direktUsers: true,
               },
             },
             merk:        true,
@@ -1092,7 +1134,8 @@ app.post('/api/maintenances/:id/logs', authenticateJWT, async (req: Request, res
 
     const hasAccess =
       maintenance.asset.company.owner_id === userId ||
-      maintenance.asset.company.members.some((member: any) => member.id_user === userId);
+      maintenance.asset.company.members.some((member: any) => member.id_user === userId) ||
+      maintenance.asset.company.direktUsers.some((u: any) => u.id === userId);
 
     if (!hasAccess) {
       return res.status(403).json({ error: 'Forbidden' });
@@ -1219,7 +1262,7 @@ app.post('/api/maintenances/:id/logs', authenticateJWT, async (req: Request, res
           select: { id: true, name: true, email: true },
         },
         assignedTechnician: {
-          select: { id: true, name: true, email: true, specialization: true, phone: true, status: true },
+          select: { id: true, name: true, email: true, specialization: true, phone: true, teknisi_status: true },
         },
         logs: {
           orderBy: { created_at: 'desc' },
@@ -1227,8 +1270,8 @@ app.post('/api/maintenances/:id/logs', authenticateJWT, async (req: Request, res
             user: {
               select: { id: true, name: true, email: true },
             },
-            technician: {
-              select: { id: true, name: true, email: true, specialization: true, phone: true, status: true },
+            teknisi: {
+              select: { id: true, name: true, email: true, specialization: true, phone: true, teknisi_status: true },
             },
           },
         },
@@ -1258,14 +1301,7 @@ app.delete('/api/maintenances/:id', authenticateJWT, async (req: Request, res: R
     const maintenance = await prisma.maintenance.findFirst({
       where: {
         id,
-        asset: {
-          company: {
-            OR: [
-              { owner_id: userId },
-              { members: { some: { id_user: userId } } },
-            ],
-          },
-        },
+        asset: { company: companyFilter(userId) },
       },
       select: { id: true },
     });
@@ -1318,7 +1354,7 @@ app.delete('/api/maintenances/:id', authenticateJWT, async (req: Request, res: R
 // Endpoint untuk ringkasan maintenance / asset summary
 app.post('/api/summarize', authenticateJWT, async (req: Request, res: Response) => {
   try {
-    let { limit, temperature } = req.body ?? {};
+    let { limit, temperature, dashboardSnapshot } = req.body ?? {};
 
     const userCompany = await findUserCompany((req as any).user.id);
 
@@ -1327,9 +1363,9 @@ app.post('/api/summarize', authenticateJWT, async (req: Request, res: Response) 
     }
     const company_id = userCompany.id;
 
-    // The summarizer must analyze the SAME aggregated view the user sees on the dashboard —
-    // not a separate raw DB query — so we build it here and hand it to the AI engine directly.
-    const dashboardData = await buildDashboardData(company_id);
+    // Use snapshot sent from the frontend (what the user actually sees on screen) if available,
+    // otherwise fall back to a fresh DB query.
+    const dashboardData = dashboardSnapshot ?? await buildDashboardData(company_id);
 
     const aiEngineBase = (process.env.AI_ENGINE_URL || 'http://localhost:8000').replace(/\/$/, '');
     const aiEngineUrl = `${aiEngineBase}/summarize`;
@@ -1341,7 +1377,11 @@ app.post('/api/summarize', authenticateJWT, async (req: Request, res: Response) 
       body: JSON.stringify({
         company_id,
         assets: dashboardData.asset_insights,
-        critical_count: dashboardData.alerts_summary.critical,
+        critical_count: dashboardData.alerts_summary?.critical ?? 0,
+        stats: dashboardData.stats,
+        monthly_trend: dashboardData.monthly_trend,
+        by_category: dashboardData.by_category,
+        upcoming_maintenances: dashboardData.upcoming_maintenances,
         limit: limit ?? 10,
         temperature: temperature ?? 0.2,
       }),
@@ -1364,14 +1404,7 @@ app.post('/api/summarize', authenticateJWT, async (req: Request, res: Response) 
 app.get('/api/gedung', authenticateJWT, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const userCompany = await prisma.company.findFirst({
-      where: {
-        OR: [
-          { owner_id: userId },
-          { members: { some: { id_user: userId } } },
-        ],
-      },
-    });
+    const userCompany = await findUserCompany(userId);
     if (!userCompany) return res.status(404).json({ error: 'No company found' });
 
     const gedung = await (prisma as any).gedung.findMany({
@@ -1443,7 +1476,7 @@ app.delete('/api/gedung/:id', authenticateJWT, async (req: Request, res: Respons
   }
 });
 
-// GET /api/technicians — daftar teknisi milik perusahaan user
+// GET /api/technicians — daftar teknisi milik perusahaan user (users dengan role='teknisi')
 app.get('/api/technicians', authenticateJWT, async (req: Request, res: Response) => {
   try {
     const userCompany = await findUserCompany((req as any).user.id);
@@ -1451,18 +1484,83 @@ app.get('/api/technicians', authenticateJWT, async (req: Request, res: Response)
 
     const { status, specialization } = req.query as { status?: string; specialization?: string };
 
-    const technicians = await (prisma as any).technician.findMany({
+    const teknisiUsers = await prisma.user.findMany({
       where: {
-        id_perusahaan: userCompany.id,
-        ...(status ? { status } : {}),
+        role: 'teknisi',
+        memberships: { some: { id_perusahaan: userCompany.id } },
+        ...(status ? { teknisi_status: status } : {}),
         ...(specialization ? { specialization } : {}),
       },
-      orderBy: [{ status: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        specialization: true,
+        teknisi_status: true,
+        experience_years: true,
+      },
+      orderBy: [{ teknisi_status: 'asc' }, { name: 'asc' }],
     });
 
+    // Map teknisi_status → status untuk backward compat dengan frontend
+    const technicians = teknisiUsers.map((u: typeof teknisiUsers[0]) => ({ ...u, status: u.teknisi_status }));
     return res.status(200).json({ technicians });
   } catch (error) {
     console.error('Error fetching technicians:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// POST /api/technicians — buat akun teknisi baru (admin only)
+app.post('/api/technicians', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const adminId = (req as any).user.id;
+    const adminUser = await prisma.user.findUnique({ where: { id: adminId }, select: { role: true } });
+    if (adminUser?.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+
+    const adminCompany = await findUserCompany(adminId);
+    if (!adminCompany) return res.status(400).json({ error: 'Admin does not belong to any company' });
+
+    const { name, email, password, phone, specialization, experience_years } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'name, email, dan password wajib diisi' });
+    }
+
+    const exists = await prisma.user.findUnique({ where: { email } });
+    if (exists) return res.status(409).json({ error: 'Email sudah digunakan' });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const teknisi = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password:         hashedPassword,
+        phone:            phone || null,
+        specialization:   specialization || null,
+        experience_years: experience_years ? parseInt(experience_years, 10) : 0,
+        role:             'teknisi',
+        teknisi_status:   'Tersedia',
+        id_perusahaan:    adminCompany.id,
+      },
+      select: {
+        id: true, name: true, email: true, phone: true,
+        specialization: true, experience_years: true,
+        teknisi_status: true, role: true, id_perusahaan: true,
+      },
+    });
+
+    // Also add to CompanyMember for backwards compatibility
+    await prisma.companyMember.upsert({
+      where: { id_user_id_perusahaan: { id_user: teknisi.id, id_perusahaan: adminCompany.id } },
+      create: { id_user: teknisi.id, id_perusahaan: adminCompany.id, role: 'teknisi' },
+      update: {},
+    });
+
+    return res.status(201).json({ teknisi });
+  } catch (error) {
+    console.error('Error creating technician:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
@@ -1477,13 +1575,299 @@ app.patch('/api/technicians/:id/status', authenticateJWT, async (req: Request, r
       return res.status(400).json({ error: 'Status tidak valid' });
     }
 
-    const updated = await (prisma as any).technician.update({
-      where: { id },
-      data: { status },
+    const updated = await prisma.user.update({
+      where: { id, role: 'teknisi' },
+      data: { teknisi_status: status },
+      select: { id: true, name: true, email: true, phone: true, specialization: true, teknisi_status: true, experience_years: true },
     });
-    return res.status(200).json({ technician: updated });
+    return res.status(200).json({ technician: { ...updated, status: updated.teknisi_status } });
   } catch (error) {
     console.error('Error updating technician status:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// GET /api/alerts — aset dengan predicted_rul <= 730 hari (latest prediction per asset)
+// ── TICKET ROUTES ────────────────────────────────────────────────────────────
+
+// GET /api/tickets — daftar ticket milik perusahaan user
+app.get('/api/tickets', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userCompany = await findUserCompany((req as any).user.id);
+    if (!userCompany) return res.status(404).json({ error: 'No company found' });
+
+    const { status, priority, page = '1', limit = '20' } = req.query as Record<string, string>;
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+    const skip = (pageNum - 1) * limitNum;
+
+    const where: any = {
+      id_perusahaan: userCompany.id,
+      ...(status && status !== 'All' ? { status } : {}),
+      ...(priority && priority !== 'All' ? { priority } : {}),
+    };
+
+    const [tickets, total] = await Promise.all([
+      (prisma as any).ticket.findMany({
+        where,
+        skip,
+        take: limitNum,
+        orderBy: { created_at: 'desc' },
+        include: {
+          asset: { select: { id: true, asset_name: true, status: true } },
+          reporter: { select: { id: true, name: true, email: true } },
+          assigned: { select: { id: true, name: true, email: true, specialization: true, teknisi_status: true } },
+          maintenance: { select: { id: true, maintenance_type: true, severity: true } },
+        },
+      }),
+      (prisma as any).ticket.count({ where }),
+    ]);
+
+    return res.status(200).json({
+      data: tickets,
+      pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) || 1 },
+    });
+  } catch (error) {
+    console.error('Error fetching tickets:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// POST /api/tickets — buat ticket baru
+app.post('/api/tickets', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const userCompany = await findUserCompany(userId);
+    if (!userCompany) return res.status(404).json({ error: 'No company found' });
+
+    const { id_asset, title, description, priority = 'Medium', id_assigned } = req.body;
+    if (!id_asset || !title || !description) {
+      return res.status(400).json({ error: 'id_asset, title, dan description wajib diisi' });
+    }
+
+    const asset = await prisma.asset.findFirst({
+      where: { id: id_asset, id_perusahaan: userCompany.id },
+    });
+    if (!asset) return res.status(404).json({ error: 'Asset tidak ditemukan' });
+
+    const ticket = await (prisma as any).ticket.create({
+      data: {
+        id_perusahaan: userCompany.id,
+        id_asset,
+        id_reporter: userId,
+        id_assigned: id_assigned || null,
+        title,
+        description,
+        priority,
+        status: 'Open',
+      },
+      include: {
+        asset: { select: { id: true, asset_name: true } },
+        reporter: { select: { id: true, name: true, email: true } },
+        assigned: { select: { id: true, name: true, email: true, specialization: true } },
+      },
+    });
+
+    wsBroadcast(userCompany.id, 'ticket:created', ticket);
+    return res.status(201).json({ message: 'Ticket berhasil dibuat', data: ticket });
+  } catch (error) {
+    console.error('Error creating ticket:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// PATCH /api/tickets/:id — update status, assigned, dll
+app.patch('/api/tickets/:id', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const { id } = req.params;
+    const userCompany = await findUserCompany(userId);
+    if (!userCompany) return res.status(404).json({ error: 'No company found' });
+
+    const existing = await (prisma as any).ticket.findFirst({
+      where: { id, id_perusahaan: userCompany.id },
+    });
+    if (!existing) return res.status(404).json({ error: 'Ticket tidak ditemukan' });
+
+    const { status, id_assigned, priority, title, description } = req.body;
+    const updateData: any = {};
+    if (status) {
+      updateData.status = status;
+      if (status === 'Resolved' || status === 'Closed') {
+        updateData.resolved_at = new Date();
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'id_assigned')) updateData.id_assigned = id_assigned || null;
+    if (priority) updateData.priority = priority;
+    if (title) updateData.title = title;
+    if (description) updateData.description = description;
+    updateData.updated_at = new Date();
+
+    const updated = await (prisma as any).ticket.update({
+      where: { id },
+      data: updateData,
+      include: {
+        asset: { select: { id: true, asset_name: true } },
+        reporter: { select: { id: true, name: true, email: true } },
+        assigned: { select: { id: true, name: true, email: true, specialization: true } },
+        maintenance: { select: { id: true, maintenance_type: true } },
+      },
+    });
+
+    wsBroadcast(userCompany.id, 'ticket:updated', updated);
+    return res.status(200).json({ message: 'Ticket berhasil diupdate', data: updated });
+  } catch (error) {
+    console.error('Error updating ticket:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// POST /api/tickets/:id/create-maintenance — buat maintenance dari ticket
+app.post('/api/tickets/:id/create-maintenance', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const { id: ticketId } = req.params;
+    const userCompany = await findUserCompany(userId);
+    if (!userCompany) return res.status(404).json({ error: 'No company found' });
+
+    const ticket = await (prisma as any).ticket.findFirst({
+      where: { id: ticketId, id_perusahaan: userCompany.id },
+      include: { asset: true },
+    });
+    if (!ticket) return res.status(404).json({ error: 'Ticket tidak ditemukan' });
+    if (ticket.maintenance_id) return res.status(400).json({ error: 'Ticket sudah memiliki maintenance terkait' });
+
+    const {
+      maintenance_type = 'Corrective',
+      severity,
+      note,
+      id_teknisi,
+      jenis_kerusakan,
+      penyebab,
+      spare_part_digunakan,
+    } = req.body;
+
+    // Auto-predict severity if not provided
+    let finalSeverity = severity || 'Medium';
+    let predictedSeverity: string | null = null;
+    let severityConfidence: number | null = null;
+    if (!severity && (jenis_kerusakan || penyebab)) {
+      try {
+        const aiResp = await fetch(`${process.env.AI_ENGINE_URL || 'http://localhost:8000'}/predict-severity`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jenis_kerusakan: jenis_kerusakan || '', penyebab: penyebab || '', asset_category: ticket.asset.kategori_id || '' }),
+        });
+        if (aiResp.ok) {
+          const aiData = await aiResp.json();
+          if (aiData.severity) {
+            finalSeverity      = aiData.severity;
+            predictedSeverity  = aiData.severity;
+            severityConfidence = aiData.confidence ?? null;
+          }
+        }
+      } catch { /* fallback to 'Medium' */ }
+    }
+
+    const newMaintenance = await prisma.maintenance.create({
+      data: {
+        id_asset: ticket.id_asset,
+        id_user: userId,
+        id_teknisi: id_teknisi || ticket.id_assigned || null,
+        maintenance_type,
+        severity: finalSeverity,
+        jenis_kerusakan: jenis_kerusakan || ticket.title,
+        penyebab: penyebab || null,
+        spare_part_digunakan: spare_part_digunakan || null,
+      },
+    });
+
+    await prisma.maintenanceLog.create({
+      data: {
+        id_maintenance: newMaintenance.id,
+        id_user: userId,
+        technician_id: id_teknisi || ticket.id_assigned || null,
+        status: 'Scheduled',
+        note: note || `Maintenance dibuat dari ticket: ${ticket.title}`,
+      },
+    });
+
+    // Link ticket → maintenance dan update status ticket
+    await (prisma as any).ticket.update({
+      where: { id: ticketId },
+      data: {
+        maintenance_id: newMaintenance.id,
+        status: 'In Progress',
+        updated_at: new Date(),
+      },
+    });
+
+    // Set asset ke Inactive
+    await prisma.asset.update({
+      where: { id: ticket.id_asset },
+      data: { status: 'Maintenance' },
+    });
+
+    // Ambil latest RUL dari history aset untuk ditampilkan di modal hasil
+    const latestPrediction = await prisma.assetPredictionHistory.findFirst({
+      where: { id_asset: ticket.id_asset },
+      orderBy: { recorded_at: 'desc' },
+      select: { predicted_rul: true },
+    });
+
+    const assetFull = await prisma.asset.findUnique({
+      where: { id: ticket.id_asset },
+      include: {
+        merk:        { select: { nama: true } },
+        kategori:    { select: { nama: true } },
+        subKategori: { select: { nama: true } },
+        gedung:      { select: { nama: true } },
+      },
+    });
+
+    wsBroadcast(userCompany.id, 'ticket:maintenance_created', {
+      ticket_id: ticketId,
+      maintenance_id: newMaintenance.id,
+    });
+    return res.status(201).json({
+      message: 'Maintenance berhasil dibuat dari ticket',
+      data: {
+        ticket_id:          ticketId,
+        maintenance_id:     newMaintenance.id,
+        predicted_severity: predictedSeverity,
+        severity_confidence: severityConfidence,
+        predicted_rul:      latestPrediction?.predicted_rul ?? null,
+        asset_name:         (assetFull as any)?.asset_name ?? '',
+        brand:              (assetFull as any)?.merk?.nama ?? '',
+        category:           (assetFull as any)?.kategori?.nama ?? '',
+        sub_category:       (assetFull as any)?.subKategori?.nama ?? '',
+        gedung_nama:        (assetFull as any)?.gedung?.nama ?? '',
+        criticality_level:  (assetFull as any)?.criticality_level ?? '',
+      },
+    });
+  } catch (error) {
+    console.error('Error creating maintenance from ticket:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// DELETE /api/tickets/:id
+app.delete('/api/tickets/:id', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const { id } = req.params;
+    const userCompany = await findUserCompany(userId);
+    if (!userCompany) return res.status(404).json({ error: 'No company found' });
+
+    const ticket = await (prisma as any).ticket.findFirst({
+      where: { id, id_perusahaan: userCompany.id },
+    });
+    if (!ticket) return res.status(404).json({ error: 'Ticket tidak ditemukan' });
+
+    await (prisma as any).ticket.delete({ where: { id } });
+    return res.status(200).json({ message: 'Ticket berhasil dihapus' });
+  } catch (error) {
+    console.error('Error deleting ticket:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
@@ -1904,8 +2288,25 @@ console.log("RUNNING CURRENT INDEX TS WITH MAINTENANCE LOG VERSION");
 console.log('Registered maintenance delete route: DELETE /api/maintenances/:id');
 
 if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+  httpServer.listen(Number(PORT), '0.0.0.0', () => {
+    const os = require('os');
+    const nets: Record<string, { family: string; internal: boolean; address: string }[]> = os.networkInterfaces();
+    let networkIP = 'localhost';
+    outer: for (const ifaces of Object.values(nets)) {
+      for (const iface of ifaces) {
+        if (iface.family === 'IPv4' && !iface.internal) { networkIP = iface.address; break outer; }
+      }
+    }
+    console.log(`
+┌─────────────────────────────────────────────┐
+│         KIRA Backend — Running              │
+├─────────────────────────────────────────────┤
+│  Local:   http://localhost:${PORT}               │
+│  Network: http://${networkIP}:${PORT}       │
+│                                             │
+│  HP: pastikan sambung WiFi yang sama,       │
+│  buka URL Network di browser HP.            │
+└─────────────────────────────────────────────┘`);
   });
 }
 

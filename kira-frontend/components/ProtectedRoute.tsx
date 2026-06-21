@@ -1,18 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Swal from 'sweetalert2';
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const router = useRouter();
 
-  useEffect(() => {
-    setMounted(true);
-
+  // useLayoutEffect fires before browser paints — no gray flash while checking auth
+  useLayoutEffect(() => {
     const token = localStorage.getItem('kira_token');
     if (!token) {
       Swal.fire({
@@ -22,21 +19,13 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
         timer: 3000,
         showConfirmButton: false,
         timerProgressBar: true,
-      }).then(() => {
-        router.push('/');
-      });
+      }).then(() => router.push('/'));
     } else {
       setIsAuthenticated(true);
     }
-
-    setAuthChecked(true);
   }, [router]);
 
-  if (!mounted || !authChecked || !isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gray-100" />
-    );
-  }
+  if (!isAuthenticated) return null;
 
   return <>{children}</>;
 }

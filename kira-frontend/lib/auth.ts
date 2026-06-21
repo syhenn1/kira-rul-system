@@ -4,6 +4,9 @@ export interface AuthUser {
   id: string;
   name: string;
   email: string;
+  role?: string;
+  id_perusahaan?: string | null;
+  specialization?: string | null;
   profile_picture?: string | null;
   phone?: string | null;
   department?: string | null;
@@ -39,10 +42,6 @@ export const authApi = {
       throw new Error(err.error || 'Registration failed');
     }
     return res.json();
-  },
-
-  loginWithGoogle: () => {
-    window.location.href = `${API_URL}/api/auth/google`;
   },
 
   getCurrentUser: async (): Promise<AuthUser> => {

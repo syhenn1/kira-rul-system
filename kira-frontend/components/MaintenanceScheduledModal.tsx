@@ -134,7 +134,7 @@ export default function MaintenanceScheduledModal({ result, onAddAnother, onView
             initial="hidden"
             animate="visible"
           >
-            <div className={`grid grid-cols-1 ${hasSeverity ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4 items-stretch`}>
+            <div className="flex flex-col gap-4">
               {/* Asset info */}
               <motion.div variants={itemVariants} className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
                 <p className="text-xs text-gray-400 font-medium tracking-wide uppercase mb-2">Detail Aset</p>

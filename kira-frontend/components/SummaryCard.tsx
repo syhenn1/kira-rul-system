@@ -5,15 +5,20 @@ import { authApi } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 
 const LOADING_STATES = [
-  'Tokenizing asset data...',
-  'Extracting features...',
-  'Analyzing maintenance history...',
-  'Generating insights...',
+  'Membaca data dashboard...',
+  'Menganalisis kondisi aset...',
+  'Memproses riwayat maintenance...',
+  'Menghasilkan ringkasan AI...',
 ];
 
 type SummaryStatus = 'idle' | 'loading' | 'loaded' | 'error';
 
-export default function SummaryCard({ onSelectAsset }: { onSelectAsset?: (assetId: string) => void }) {
+interface Props {
+  onSelectAsset?: (assetId: string) => void;
+  dashboardSnapshot?: object | null;
+}
+
+export default function SummaryCard({ onSelectAsset, dashboardSnapshot }: Props) {
   const [summary, setSummary] = useState<string>('');
   const [assets, setAssets] = useState<{ id: string, name: string, brand: string, category: string, status: string, pred_rul: number | null }[]>([]);
   const [criticalCount, setCriticalCount] = useState<number>(0);
@@ -23,12 +28,10 @@ export default function SummaryCard({ onSelectAsset }: { onSelectAsset?: (assetI
   const [showContent, setShowContent] = useState(false);
 
   const isLoading = status === 'loading';
-  const isLightMode = status === 'idle' || status === 'loading';
 
   const abortRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<number | null>(null);
 
-  // Loading text cycler
   useEffect(() => {
     if (!isLoading) return;
     const interval = setInterval(() => {
@@ -37,7 +40,6 @@ export default function SummaryCard({ onSelectAsset }: { onSelectAsset?: (assetI
     return () => clearInterval(interval);
   }, [isLoading]);
 
-  // Cancel any in-flight request if the card unmounts mid-fetch
   useEffect(() => {
     return () => {
       if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
@@ -45,9 +47,6 @@ export default function SummaryCard({ onSelectAsset }: { onSelectAsset?: (assetI
     };
   }, []);
 
-  // Fired by the "View Insights" button — summarization is opt-in, not run
-  // automatically on every dashboard visit, so it only ever happens when the
-  // user explicitly asks for it.
   const handleViewInsights = () => {
     if (status === 'loading') return;
 
@@ -70,7 +69,8 @@ export default function SummaryCard({ onSelectAsset }: { onSelectAsset?: (assetI
           },
           body: JSON.stringify({
             limit: 10,
-            temperature: 0.2
+            temperature: 0.2,
+            dashboardSnapshot: dashboardSnapshot ?? null,
           }),
           signal: controller.signal,
         });
@@ -92,62 +92,56 @@ export default function SummaryCard({ onSelectAsset }: { onSelectAsset?: (assetI
           console.error('Summary fetch error:', fetchError);
         }
       } finally {
-        // Trigger the pop animation slightly after loading finishes
         setTimeout(() => setShowContent(true), 50);
       }
-    }, 1500); // artificially extended to show the cool loading pipeline
+    }, 1500);
   };
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl p-6 shadow-lg transition-all duration-500
-      ${isLightMode ? 'bg-white' : 'bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 text-white'}`}
-    >
-      {/* Decorative background shapes */}
-      {!isLightMode && (
-        <>
-          <div className="absolute -top-24 -right-24 w-48 h-48 bg-white/10 rounded-full blur-2xl"></div>
-          <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-blue-400/20 rounded-full blur-2xl"></div>
-        </>
-      )}
+    <div className="relative overflow-hidden rounded-2xl p-6 shadow-lg bg-white min-w-0">
 
-      <div className="relative z-10 flex items-center justify-between">
-        <div>
-          <h2 className={`text-xl font-bold ${isLightMode ? 'text-gray-900' : 'text-white'}`}>
-            AI Maintenance Summary
-          </h2>
-          <p className={`text-sm mt-1 ${isLightMode ? 'text-gray-500' : 'text-blue-100'}`}>
-            Ringkasan kondisi aset dan pemeliharaan terbaru.
+      {/* Header row */}
+      <div className="flex items-center justify-between gap-4 min-w-0">
+        <div className="min-w-0">
+          <h2 className="text-xl font-bold text-gray-900">AI Maintenance Summary</h2>
+          <p className="text-sm mt-1 text-gray-500">
+            {dashboardSnapshot
+              ? 'AI membaca tampilan dashboard saat ini.'
+              : 'Ringkasan kondisi aset dan pemeliharaan terbaru.'}
           </p>
         </div>
 
-        {status === 'loading' ? (
-          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-600 text-sm font-medium">
-            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            NLP Processing
-          </span>
-        ) : status === 'loaded' ? (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-white text-sm font-medium backdrop-blur-sm border border-white/10">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-            Generated
-          </span>
-        ) : status === 'error' ? (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-white text-sm font-medium backdrop-blur-sm border border-white/10">
-            <span className="w-2 h-2 rounded-full bg-red-400"></span>
-            Gagal
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100 text-gray-500 text-sm font-medium">
-            <span className="w-2 h-2 rounded-full bg-gray-400"></span>
-            Belum Dianalisis
-          </span>
-        )}
+        <div className="shrink-0">
+          {status === 'loading' ? (
+            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-600 text-sm font-medium">
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              NLP Processing
+            </span>
+          ) : status === 'loaded' ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-100 text-green-700 text-sm font-medium">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+              Generated
+            </span>
+          ) : status === 'error' ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100 text-red-600 text-sm font-medium">
+              <span className="w-2 h-2 rounded-full bg-red-400"></span>
+              Gagal
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100 text-gray-500 text-sm font-medium">
+              <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+              Belum Dianalisis
+            </span>
+          )}
+        </div>
       </div>
 
-      <div className="relative z-10 mt-5 min-h-30">
-        {status === 'idle' ? (
+      {/* Content area */}
+      <div className="mt-5 min-h-30 max-h-80 overflow-y-auto scrollbar-hidden">
+        {status === 'idle' && (
           <div className="flex flex-col items-center justify-center text-center h-full py-6 space-y-4">
             <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -155,7 +149,9 @@ export default function SummaryCard({ onSelectAsset }: { onSelectAsset?: (assetI
               </svg>
             </div>
             <p className="text-sm text-gray-500 max-w-sm">
-              Hasilkan ringkasan AI berdasarkan data dashboard terkini — kondisi aset, riwayat pemeliharaan, dan aset yang butuh perhatian segera.
+              {dashboardSnapshot
+                ? 'AI akan membaca data yang tampil di dashboard ini — stat, aset, maintenance, dan prediksi RUL.'
+                : 'Hasilkan ringkasan AI berdasarkan data dashboard terkini.'}
             </p>
             <button
               onClick={handleViewInsights}
@@ -168,7 +164,9 @@ export default function SummaryCard({ onSelectAsset }: { onSelectAsset?: (assetI
               View Insights
             </button>
           </div>
-        ) : status === 'error' ? (
+        )}
+
+        {status === 'error' && (
           <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm border border-red-100 flex items-center justify-between gap-3">
             <span>{error}</span>
             <button
@@ -178,9 +176,10 @@ export default function SummaryCard({ onSelectAsset }: { onSelectAsset?: (assetI
               Coba Lagi
             </button>
           </div>
-        ) : isLoading ? (
+        )}
+
+        {isLoading && (
           <div className="flex flex-col items-center justify-center h-full py-6 space-y-4">
-            {/* NLP Pipeline Visualizer */}
             <div className="flex w-full max-w-sm gap-1">
               {LOADING_STATES.map((_, idx) => (
                 <div key={idx} className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${idx <= loadingStep ? 'bg-blue-600' : 'bg-gray-100'}`}></div>
@@ -190,19 +189,27 @@ export default function SummaryCard({ onSelectAsset }: { onSelectAsset?: (assetI
               {LOADING_STATES[loadingStep]}
             </p>
           </div>
-        ) : (
-          <div className={`transition-all duration-700 transform ${showContent ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-4 opacity-0 scale-95'}`}>
-            <p className="text-base leading-relaxed text-blue-50 font-medium">
-              {summary}
-            </p>
+        )}
 
-            {(() => {
+        {status === 'loaded' && (
+          <div className={`transition-all duration-500 ${showContent ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}>
+            {/* Summary text in a styled card */}
+            <div className="rounded-xl bg-linear-to-br from-blue-600 via-blue-700 to-indigo-800 p-4 relative overflow-hidden">
+              <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+              <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-blue-400/20 rounded-full blur-2xl pointer-events-none"></div>
+              <p className="relative text-sm leading-relaxed text-blue-50 font-medium wrap-break-word whitespace-pre-line">
+                {summary}
+              </p>
+            </div>
+
+            {/* Critical assets */}
+            {criticalCount > 0 && (() => {
               const criticalAssets = assets.filter((a) => a.pred_rul != null && a.pred_rul <= 180);
-              return criticalCount > 0 ? (
-                <div className="mt-6 pt-5 border-t border-white/10">
+              return (
+                <div className="mt-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse shrink-0"></span>
-                    <h3 className="text-xs font-semibold text-red-300 uppercase tracking-wider">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0"></span>
+                    <h3 className="text-xs font-semibold text-red-600 uppercase tracking-wider">
                       Aset Kritis — Segera Ditangani ({criticalCount})
                     </h3>
                   </div>
@@ -211,20 +218,20 @@ export default function SummaryCard({ onSelectAsset }: { onSelectAsset?: (assetI
                       <button
                         key={asset.id}
                         onClick={() => onSelectAsset?.(asset.id)}
-                        className="group shrink-0 w-48 flex flex-col p-3 rounded-xl bg-red-500/20 text-white border border-red-400/40 hover:bg-red-500/30 transition-all duration-300 shadow-sm backdrop-blur-md text-left"
+                        className="group shrink-0 w-48 flex flex-col p-3 rounded-xl bg-red-50 border border-red-200 hover:bg-red-100 transition-all duration-200 shadow-sm text-left"
                       >
                         <div className="flex items-center gap-2 mb-2">
                           <div className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center text-red-600 shrink-0">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path></svg>
                           </div>
-                          <p className="font-semibold text-xs leading-tight text-white truncate" title={asset.name}>{asset.name}</p>
+                          <p className="font-semibold text-xs leading-tight text-gray-800 truncate" title={asset.name}>{asset.name}</p>
                         </div>
-                        <p className="text-[10px] text-red-200 truncate mb-2">{asset.brand} • {asset.category}</p>
-                        <div className="flex justify-between items-center pt-2 border-t border-red-400/20">
-                          <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-full ${asset.status?.toLowerCase() === 'scrap' || asset.status?.toLowerCase() === 'maintenance' ? 'bg-red-500/40 text-red-100' : 'bg-orange-500/30 text-orange-100'}`}>
+                        <p className="text-[10px] text-gray-500 truncate mb-2">{asset.brand} • {asset.category}</p>
+                        <div className="flex justify-between items-center pt-2 border-t border-red-100">
+                          <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">
                             {asset.status || '—'}
                           </span>
-                          <span className="text-[10px] font-bold bg-red-700/50 text-red-100 px-1.5 py-0.5 rounded border border-red-600/50">
+                          <span className="text-[10px] font-bold bg-red-600 text-white px-1.5 py-0.5 rounded">
                             {asset.pred_rul} hari
                           </span>
                         </div>
@@ -232,7 +239,7 @@ export default function SummaryCard({ onSelectAsset }: { onSelectAsset?: (assetI
                     ))}
                   </div>
                 </div>
-              ) : null;
+              );
             })()}
           </div>
         )}
