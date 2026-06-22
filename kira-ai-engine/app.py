@@ -301,7 +301,7 @@ def load_models():
     print(f"[Startup] scikit-learn version: {sklearn_ver}")
     print(f"[Startup] pandas    version: {pd.__version__}")
 
-    model_path = os.path.join(os.path.dirname(__file__), "sintesised_random_forest_model.joblib")
+    model_path = os.path.join(os.path.dirname(__file__), "sintesised_gradient_boosting_model.joblib")
 
     try:
         if not os.path.exists(model_path):

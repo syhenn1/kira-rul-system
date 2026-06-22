@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { BrainCircuit, LineChart, ShieldAlert } from "lucide-react";
 
 export default function Home() {
@@ -7,8 +8,8 @@ export default function Home() {
       <nav className="fixed top-0 inset-x-0 z-50 glass border-b-0">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center shadow-lg">
-              <span className="text-white font-bold text-lg">K</span>
+            <div className="w-8 h-8 rounded-lg overflow-hidden shadow-lg">
+              <Image src="/assets/kira.png" alt="Kira" width={32} height={32} className="w-full h-full object-contain" />
             </div>
             <span className="font-bold text-xl tracking-tight text-zinc-900 dark:text-white">Kira RUL System</span>
           </div>

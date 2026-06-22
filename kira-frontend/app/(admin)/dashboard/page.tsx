@@ -149,9 +149,9 @@ export default function DashboardPage() {
       <OnboardingModal />
       <TourOverlay steps={TOUR_STEPS} storageKey="kira_tour_dashboard" delay={1200} />
 
-      <main className="flex-1 min-h-screen bg-gray-100">
+      <main className="flex-1 min-w-0 min-h-screen bg-gray-100 overflow-x-hidden">
 
-        <div className="flex-1 min-w-0 sb-content p-8">
+        <div className="min-w-0 sb-content p-8">
           <Topbar />
 
           {/* Welcome */}
