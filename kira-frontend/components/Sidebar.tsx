@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useLayoutEffect, useState } from 'react';
 import { authApi } from '@/lib/auth';
@@ -97,11 +98,11 @@ export default function Sidebar() {
           <div className="flex flex-col items-center pt-8">
             <Link href="/">
               <div
-                className={`rounded-3xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-xl transition-all duration-300 ${
+                className={`rounded-3xl overflow-hidden shadow-xl transition-all duration-300 ${
                   collapsed ? 'w-12 h-12 mt-2' : 'w-20 h-20'
                 }`}
               >
-                <span className={`text-white font-bold transition-all duration-300 ${collapsed ? 'text-2xl' : 'text-4xl'}`}>K</span>
+                <Image src="/assets/kira.png" alt="Kira" width={80} height={80} className="w-full h-full object-contain" />
               </div>
             </Link>
 

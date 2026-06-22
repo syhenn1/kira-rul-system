@@ -98,7 +98,7 @@ export default function SummaryCard({ onSelectAsset, dashboardSnapshot }: Props)
   };
 
   return (
-    <div className="relative overflow-hidden rounded-2xl p-6 shadow-lg bg-white min-w-0">
+    <div className="relative overflow-hidden rounded-2xl p-6 shadow-lg bg-white min-w-0 w-full">
 
       {/* Header row */}
       <div className="flex items-center justify-between gap-4 min-w-0">
@@ -140,7 +140,7 @@ export default function SummaryCard({ onSelectAsset, dashboardSnapshot }: Props)
       </div>
 
       {/* Content area */}
-      <div className="mt-5 min-h-30 max-h-80 overflow-y-auto scrollbar-hidden">
+      <div className="mt-5 min-h-30 max-h-80 overflow-y-auto overflow-x-hidden scrollbar-hidden">
         {status === 'idle' && (
           <div className="flex flex-col items-center justify-center text-center h-full py-6 space-y-4">
             <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
@@ -213,12 +213,12 @@ export default function SummaryCard({ onSelectAsset, dashboardSnapshot }: Props)
                       Aset Kritis — Segera Ditangani ({criticalCount})
                     </h3>
                   </div>
-                  <div className="flex gap-3 overflow-x-auto scrollbar-hidden -mx-1 px-1 pb-1">
+                  <div className="flex flex-wrap gap-3 pb-1">
                     {criticalAssets.map((asset) => (
                       <button
                         key={asset.id}
                         onClick={() => onSelectAsset?.(asset.id)}
-                        className="group shrink-0 w-48 flex flex-col p-3 rounded-xl bg-red-50 border border-red-200 hover:bg-red-100 transition-all duration-200 shadow-sm text-left"
+                        className="group w-48 flex flex-col p-3 rounded-xl bg-red-50 border border-red-200 hover:bg-red-100 transition-all duration-200 shadow-sm text-left"
                       >
                         <div className="flex items-center gap-2 mb-2">
                           <div className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center text-red-600 shrink-0">
