@@ -124,6 +124,8 @@ function formatCurrency(value: number | null) {
 export default function DashboardPage() {
   const [dashData, setDashData] = useState<DashboardData | null>(null);
   const [detailAssetId, setDetailAssetId] = useState<string | null>(null);
+  const [hasPin, setHasPin] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
 
   useEffect(() => {
     const token = authApi.getToken();
@@ -132,6 +134,13 @@ export default function DashboardPage() {
     })
       .then((r) => r.json())
       .then(setDashData)
+      .catch(console.error);
+
+    fetch(`${API_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((u) => setHasPin(!!u?.has_pin))
       .catch(console.error);
   }, []);
 
@@ -146,8 +155,12 @@ export default function DashboardPage() {
 
   return (
     <ProtectedRoute>
-      <OnboardingModal />
-      <TourOverlay steps={TOUR_STEPS} storageKey="kira_tour_dashboard" delay={1200} />
+      <OnboardingModal
+        onPinSet={() => setHasPin(true)}
+        onOpen={() => setOnboardingOpen(true)}
+        onClose={() => setOnboardingOpen(false)}
+      />
+      {hasPin && !onboardingOpen && <TourOverlay steps={TOUR_STEPS} storageKey="kira_tour_dashboard" delay={1200} />}
 
       <main className="flex-1 min-w-0 min-h-screen bg-gray-100 overflow-x-hidden">
 
@@ -169,25 +182,25 @@ export default function DashboardPage() {
             className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mt-6 animate-[enterUp_0.5s_0.14s_ease-out_both]"
             data-tour="stat-cards"
           >
-            <Tooltip content="Jumlah seluruh aset terdaftar di sistem" position="bottom">
+            <Tooltip content="Jumlah seluruh aset terdaftar di sistem" position="bottom" disabled={!hasPin || onboardingOpen}>
               <div className="w-full">
                 <StatCard title="Total Assets" value={totalAssets} subtitle="Semua Aset" />
               </div>
             </Tooltip>
 
-            <Tooltip content="Aset yang sedang aktif digunakan" position="bottom">
+            <Tooltip content="Aset yang sedang aktif digunakan" position="bottom" disabled={!hasPin || onboardingOpen}>
               <div className="w-full">
                 <StatCard title="In Use" value={statusCount(dashData, 'Active')} subtitle="Sedang Digunakan" />
               </div>
             </Tooltip>
 
-            <Tooltip content="Aset yang sedang dalam proses maintenance" position="bottom">
+            <Tooltip content="Aset yang sedang dalam proses maintenance" position="bottom" disabled={!hasPin || onboardingOpen}>
               <div className="w-full">
                 <StatCard title="Maintenance" value={statusCount(dashData, 'Maintenance')} subtitle="Dalam Perbaikan" />
               </div>
             </Tooltip>
 
-            <Tooltip content="Aset dengan RUL kritis yang perlu perhatian segera" position="bottom">
+            <Tooltip content="Aset dengan RUL kritis yang perlu perhatian segera" position="bottom" disabled={!hasPin || onboardingOpen}>
               <div className="w-full">
                 <StatCard
                   title="Perlu Perhatian"
@@ -224,7 +237,7 @@ export default function DashboardPage() {
             >
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-semibold text-gray-800">Alerts & Reminders</h2>
-                <Tooltip content="Lihat semua peringatan aset di halaman Alerts">
+                <Tooltip content="Lihat semua peringatan aset di halaman Alerts" disabled={!hasPin || onboardingOpen}>
                   <Link href="/alerts" className="text-blue-600 hover:text-blue-700 font-medium transition text-sm">
                     Lihat Semua
                   </Link>

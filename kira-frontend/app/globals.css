@@ -17,15 +17,12 @@
   --foreground: #171717;
 }
 
+/* Prevent iOS rubber-band scroll from revealing black background */
 html {
   font-size: 90%;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #050505;
-    --foreground: #ededed;
-  }
+  background: var(--background);
+  /* Clip overscroll so the stretched area uses our background, not the browser default */
+  overscroll-behavior: none;
 }
 
 body {
@@ -33,6 +30,7 @@ body {
   color: var(--foreground);
   font-family: 'Inter', system-ui, sans-serif;
   overflow-x: hidden;
+  overscroll-behavior: none;
 }
 
 /* Keeps scroll behavior but hides the scrollbar track across browsers */

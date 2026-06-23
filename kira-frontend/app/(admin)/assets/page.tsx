@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Swal from 'sweetalert2';
 
 import ProtectedRoute from '@/components/ProtectedRoute';
+import AssetDemoFlow from '@/components/AssetDemoFlow';
 import AddAssetModal from '@/components/AddAssetModal';
 import AssetAddedModal, { type AssetAddedResult } from '@/components/AssetAddedModal';
 import AssetDetailPanel from '@/components/AssetDetailPanel';
@@ -295,7 +296,7 @@ export default function AssetsPage() {
         {/* SEARCH + FILTER PANEL */}
         <div
           data-tour="asset-filter-panel"
-          className="bg-white rounded-3xl border shadow-sm p-6 mb-8 animate-[enterUp_0.5s_0.14s_ease-out_both]"
+          className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 mb-8 animate-[enterUp_0.5s_0.14s_ease-out_both]"
         >
           {/* Row 1: Search + Status + Sort + Filter toggle */}
           <div className="flex gap-4 flex-wrap">
@@ -305,13 +306,13 @@ export default function AssetsPage() {
               placeholder="Search assets…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 min-w-50 border rounded-2xl px-5 py-3.5 outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder:text-gray-400 transition"
+              className="flex-1 min-w-50 border border-gray-100 rounded-2xl px-5 py-3.5 outline-none focus:ring-2 focus:ring-blue-500 text-black placeholder:text-gray-400 transition"
             />
 
             <select
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-              className="border rounded-2xl px-4 py-3.5 text-gray-600 cursor-pointer outline-none focus:ring-2 focus:ring-blue-500"
+              className="border border-gray-100 rounded-2xl px-4 py-3.5 text-gray-600 cursor-pointer outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Status</option>
               <option value="Active">Active</option>
@@ -322,7 +323,7 @@ export default function AssetsPage() {
             <select
               value={sortBy}
               onChange={(e) => { setSortBy(e.target.value); setCurrentPage(1); }}
-              className="border rounded-2xl px-4 py-3.5 text-gray-600 cursor-pointer outline-none focus:ring-2 focus:ring-blue-500"
+              className="border border-gray-100 rounded-2xl px-4 py-3.5 text-gray-600 cursor-pointer outline-none focus:ring-2 focus:ring-blue-500"
             >
               {SORT_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -334,7 +335,7 @@ export default function AssetsPage() {
               className={`flex items-center gap-2 border rounded-2xl px-5 py-3.5 font-medium transition ${
                 filterOpen || activeFilterCount > 0
                   ? 'bg-blue-600 text-white border-blue-600'
-                  : 'text-gray-600 hover:bg-gray-50'
+                  : 'border-gray-100 text-gray-600 hover:bg-gray-50'
               }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -360,7 +361,7 @@ export default function AssetsPage() {
 
           {/* Row 2: Expandable advanced filters */}
           {filterOpen && (
-            <div className="mt-6 pt-6 border-t grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+            <div className="mt-6 pt-6 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
 
               {/* RUL Range */}
               <div className="md:col-span-2">
@@ -372,7 +373,7 @@ export default function AssetsPage() {
                     placeholder="Min"
                     value={rulMin}
                     onChange={(e) => { setRulMin(e.target.value); setCurrentPage(1); }}
-                    className="w-full border rounded-xl px-4 py-2.5 text-sm text-black outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-gray-100 rounded-xl px-4 py-2.5 text-sm text-black outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <span className="text-gray-400 text-sm shrink-0">–</span>
                   <input
@@ -381,7 +382,7 @@ export default function AssetsPage() {
                     placeholder="Max"
                     value={rulMax}
                     onChange={(e) => { setRulMax(e.target.value); setCurrentPage(1); }}
-                    className="w-full border rounded-xl px-4 py-2.5 text-sm text-black outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-gray-100 rounded-xl px-4 py-2.5 text-sm text-black outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -394,7 +395,7 @@ export default function AssetsPage() {
                         className={`text-xs px-3 py-1.5 rounded-full border transition font-medium ${
                           active
                             ? 'bg-blue-600 text-white border-blue-600'
-                            : 'text-gray-600 hover:border-blue-400 hover:text-blue-600'
+                            : 'border-gray-100 text-gray-600 hover:border-blue-400 hover:text-blue-600'
                         }`}
                       >
                         {p.label}
@@ -410,7 +411,7 @@ export default function AssetsPage() {
                 <select
                   value={categoryFilter}
                   onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
-                  className="w-full border rounded-xl px-4 py-2.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-100 rounded-xl px-4 py-2.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Semua Kategori</option>
                   {categories.map((c) => (
@@ -425,7 +426,7 @@ export default function AssetsPage() {
                 <select
                   value={criticalityFilter}
                   onChange={(e) => { setCriticalityFilter(e.target.value); setCurrentPage(1); }}
-                  className="w-full border rounded-xl px-4 py-2.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-100 rounded-xl px-4 py-2.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Semua Level</option>
                   <option value="Critical">Critical</option>
@@ -440,7 +441,7 @@ export default function AssetsPage() {
                 <select
                   value={gedungFilter}
                   onChange={(e) => { setGedungFilter(e.target.value); setCurrentPage(1); }}
-                  className="w-full border rounded-xl px-4 py-2.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-100 rounded-xl px-4 py-2.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Semua Gedung</option>
                   {gedungs.map((g) => (
@@ -454,12 +455,12 @@ export default function AssetsPage() {
 
         {/* TABLE */}
         <div
-          className="bg-white rounded-3xl border shadow-sm overflow-hidden animate-[enterUp_0.5s_0.2s_ease-out_both]"
+          className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden animate-[enterUp_0.5s_0.2s_ease-out_both]"
           data-tour="asset-table"
         >
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="border-b bg-gray-50">
+              <thead className="border-b border-gray-100 bg-gray-50">
                 <tr className="text-left text-sm text-gray-500">
                   <th className="px-6 py-5">Asset Name</th>
                   <th className="px-6 py-5">Category</th>
@@ -507,7 +508,7 @@ export default function AssetsPage() {
                       <tr
                         key={asset.id}
                         onClick={() => setDetailAssetId(asset.id)}
-                        className="stagger-item border-b hover:bg-gray-50 transition cursor-pointer"
+                        className="stagger-item border-b border-gray-100 hover:bg-gray-50 transition cursor-pointer"
                         style={{ animationDelay: `${i * 40}ms` }}
                       >
                         <td className="px-6 py-5 font-semibold text-[#111827]">
@@ -612,13 +613,15 @@ export default function AssetsPage() {
         onClose={() => setDetailAssetId(null)}
         onSaved={refreshAssets}
       />
+
+      <AssetDemoFlow />
     </ProtectedRoute>
   );
 }
 
 function StatCard({ title, value }: { title: string; value: string }) {
   return (
-    <div className="bg-white rounded-3xl border shadow-sm p-6 hover:shadow-md transition-all duration-300 hover:-translate-y-0.5">
+    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 hover:shadow-md transition-all duration-300 hover:-translate-y-0.5">
       <p className="text-gray-500 text-sm">{title}</p>
       <h2 className="text-4xl font-bold text-[#111827] mt-3">{value}</h2>
     </div>

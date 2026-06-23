@@ -6,6 +6,31 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import { authApi, AuthUser } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
 import { CheckCircle2, Wrench } from 'lucide-react';
+import TourOverlay from '@/components/TourOverlay';
+import Tooltip from '@/components/Tooltip';
+
+const TOUR_STEPS = [
+  {
+    target: 'tambah-aset',
+    title: 'Pilih Aset Bermasalah',
+    desc: 'Pilih aset yang mengalami kerusakan atau masalah dari daftar yang tersedia.',
+  },
+  {
+    target: 'tambah-judul',
+    title: 'Judul Komplain',
+    desc: 'Tulis judul singkat yang menggambarkan masalah, misalnya "AC di lantai 2 tidak dingin".',
+  },
+  {
+    target: 'tambah-deskripsi',
+    title: 'Deskripsi Masalah',
+    desc: 'Jelaskan masalah secara detail: gejala, kapan terjadi, dan seberapa parah — semakin detail semakin baik.',
+  },
+  {
+    target: 'tambah-prioritas',
+    title: 'Tingkat Urgensi',
+    desc: 'Pilih urgensi sesuai kondisi. Critical/High untuk kerusakan berat yang segera butuh penanganan.',
+  },
+];
 
 interface Asset {
   id: string;
@@ -137,7 +162,7 @@ export default function TeknisiTambahPage() {
           <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5 animate-[enterUp_0.5s_ease-out_both]">
 
             {/* Aset */}
-            <div>
+            <div data-tour="tambah-aset">
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Aset yang Bermasalah <span className="text-red-500">*</span>
               </label>
@@ -162,7 +187,7 @@ export default function TeknisiTambahPage() {
             </div>
 
             {/* Judul */}
-            <div>
+            <div data-tour="tambah-judul">
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Judul Komplain <span className="text-red-500">*</span></label>
               <input
                 type="text"
@@ -176,7 +201,7 @@ export default function TeknisiTambahPage() {
             </div>
 
             {/* Deskripsi */}
-            <div>
+            <div data-tour="tambah-deskripsi">
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Deskripsi Masalah <span className="text-red-500">*</span></label>
               <textarea
                 name="description"
@@ -190,7 +215,7 @@ export default function TeknisiTambahPage() {
             </div>
 
             {/* Prioritas */}
-            <div>
+            <div data-tour="tambah-prioritas">
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Tingkat Urgensi</label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {PRIORITIES.map(p => (
@@ -221,17 +246,21 @@ export default function TeknisiTambahPage() {
               >
                 Batal
               </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold shadow-lg shadow-blue-600/20 transition"
-              >
-                {loading ? 'Mengirim...' : 'Kirim Komplain'}
-              </button>
+              <Tooltip content="Kirim laporan ke admin untuk ditindaklanjuti" position="top">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold shadow-lg shadow-blue-600/20 transition"
+                >
+                  {loading ? 'Mengirim...' : 'Kirim Komplain'}
+                </button>
+              </Tooltip>
             </div>
           </form>
         </div>
       </main>
+
+      <TourOverlay steps={TOUR_STEPS} storageKey="teknisi-tambah-tour-v1" />
     </ProtectedRoute>
   );
 }
