@@ -99,10 +99,10 @@ export default function Sidebar() {
             <Link href="/">
               <div
                 className={`rounded-3xl overflow-hidden shadow-xl transition-all duration-300 ${
-                  collapsed ? 'w-12 h-12 mt-2' : 'w-20 h-20'
+                  collapsed ? 'w-14 h-14 mt-2' : 'w-32 h-32'
                 }`}
               >
-                <Image src="/assets/kira.png" alt="Kira" width={80} height={80} className="w-full h-full object-contain" />
+                <Image src="/assets/kira.png" alt="Kira" width={128} height={128} className="w-full h-full object-contain" />
               </div>
             </Link>
 

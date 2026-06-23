@@ -67,8 +67,8 @@ export default function TeknisiSidebar() {
         <div className="bg-gradient-to-b from-[#07152F] to-[#16213E] pb-8">
           <div className="flex flex-col items-center pt-8">
             <Link href="/">
-              <div className={`rounded-3xl overflow-hidden shadow-xl transition-all duration-300 ${collapsed ? 'w-12 h-12 mt-2' : 'w-20 h-20'}`}>
-                <Image src="/assets/kira.png" alt="Kira" width={80} height={80} className="w-full h-full object-contain" />
+              <div className={`rounded-3xl overflow-hidden shadow-xl transition-all duration-300 ${collapsed ? 'w-14 h-14 mt-2' : 'w-32 h-32'}`}>
+                <Image src="/assets/kira.png" alt="Kira" width={128} height={128} className="w-full h-full object-contain" />
               </div>
             </Link>
             <div className={`flex flex-col items-center transition-all duration-300 overflow-hidden ${collapsed ? 'opacity-0 h-0 mt-0' : 'opacity-100 h-auto mt-5'}`}>

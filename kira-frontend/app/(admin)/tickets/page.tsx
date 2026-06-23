@@ -5,10 +5,30 @@ import { Plus, Search, Filter, Ticket, Wrench, CheckCircle2, Clock, AlertCircle,
 import Topbar from '@/components/Topbar';
 import Pagination from '@/components/Pagination';
 import Tooltip from '@/components/Tooltip';
+import TourOverlay from '@/components/TourOverlay';
+import TicketDemoFlow from '@/components/TicketDemoFlow';
 import Swal from 'sweetalert2';
 import { authApi } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
 import MaintenanceScheduledModal, { type MaintenanceScheduledResult } from '@/components/MaintenanceScheduledModal';
+
+const TOUR_STEPS = [
+  {
+    target: 'ticket-search',
+    title: 'Cari Ticket',
+    desc: 'Cari ticket berdasarkan judul atau nama aset secara real-time.',
+  },
+  {
+    target: 'ticket-priority-filter',
+    title: 'Filter Prioritas',
+    desc: 'Filter ticket berdasarkan level prioritas: Critical, High, Medium, atau Low.',
+  },
+  {
+    target: 'ticket-table',
+    title: 'Tabel Ticket',
+    desc: 'Klik baris mana saja untuk membuka detail ticket — update status, tugaskan teknisi, atau buat maintenance dari ticket.',
+  },
+];
 
 const STATUS_OPTIONS = ['All', 'Open', 'In Progress', 'Resolved', 'Closed'];
 const PRIORITY_OPTIONS = ['All', 'Critical', 'High', 'Medium', 'Low'];
@@ -57,8 +77,6 @@ type TeknisiUser = {
   status: string;
 };
 
-type AssetOption = { id: string; asset_name: string };
-
 const PAGE_SIZE = 15;
 
 function fmtDate(iso: string) {
@@ -80,14 +98,8 @@ export default function TicketsPage() {
   const [search, setSearch] = useState('');
 
   const [selectedTicket, setSelectedTicket] = useState<TicketItem | null>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const [assets, setAssets] = useState<AssetOption[]>([]);
   const [teknisiList, setTeknisiList] = useState<TeknisiUser[]>([]);
-
-  // Form state for create ticket
-  const [form, setForm] = useState({ id_asset: '', title: '', description: '', priority: 'Medium', id_assigned: '' });
-  const [submitting, setSubmitting] = useState(false);
 
   // Detail panel state
   const [detailStatus, setDetailStatus] = useState('');
@@ -100,6 +112,7 @@ export default function TicketsPage() {
 
   // WebSocket realtime
   const [wsConnected, setWsConnected] = useState(false);
+  const [wsOpen, setWsOpen] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
   const fetchTickets = useCallback(async () => {
@@ -120,12 +133,6 @@ export default function TicketsPage() {
     }
   }, [page, statusFilter, priorityFilter]);
 
-  const fetchAssets = useCallback(async () => {
-    const res = await fetch(`${API_URL}/api/assets?limit=200`, { headers: getAuthHeaders() });
-    const data = await res.json();
-    setAssets((data.data || []).map((a: any) => ({ id: a.id, asset_name: a.asset_name })));
-  }, []);
-
   const fetchTeknisi = useCallback(async () => {
     const res = await fetch(`${API_URL}/api/technicians`, { headers: getAuthHeaders() });
     const data = await res.json();
@@ -133,14 +140,14 @@ export default function TicketsPage() {
   }, []);
 
   useEffect(() => { fetchTickets(); }, [fetchTickets]);
-  useEffect(() => { fetchAssets(); fetchTeknisi(); }, [fetchAssets, fetchTeknisi]);
+  useEffect(() => { fetchTeknisi(); }, [fetchTeknisi]);
 
   // WebSocket connection for realtime updates
   useEffect(() => {
     const token = authApi.getToken();
     if (!token) return;
 
-    const wsUrl = API_URL.replace(/^http/, 'ws');
+    const wsUrl = `${API_URL.replace(/^http/, 'ws')}/ws`;
     let ws: WebSocket;
     let reconnectTimer: ReturnType<typeof setTimeout>;
 
@@ -149,6 +156,7 @@ export default function TicketsPage() {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        setWsOpen(true);
         ws.send(JSON.stringify({ type: 'auth', token }));
       };
 
@@ -175,8 +183,8 @@ export default function TicketsPage() {
 
       ws.onclose = () => {
         setWsConnected(false);
+        setWsOpen(false);
         wsRef.current = null;
-        // Reconnect after 3 seconds
         reconnectTimer = setTimeout(connect, 3000);
       };
 
@@ -191,6 +199,13 @@ export default function TicketsPage() {
     };
   }, [API_URL, fetchTickets]);
 
+  // Polling fallback — refresh every 5s when WebSocket is not authenticated
+  useEffect(() => {
+    if (wsConnected) return;
+    const interval = setInterval(() => fetchTickets(), 5000);
+    return () => clearInterval(interval);
+  }, [wsConnected, fetchTickets]);
+
   const filtered = tickets.filter((t) =>
     t.title.toLowerCase().includes(search.toLowerCase()) ||
     t.asset.asset_name.toLowerCase().includes(search.toLowerCase())
@@ -201,30 +216,6 @@ export default function TicketsPage() {
     'In Progress': tickets.filter((t) => t.status === 'In Progress').length,
     Resolved:    tickets.filter((t) => t.status === 'Resolved').length,
     Closed:      tickets.filter((t) => t.status === 'Closed').length,
-  };
-
-  const handleCreateTicket = async () => {
-    if (!form.id_asset || !form.title || !form.description) {
-      Swal.fire('Validasi', 'Asset, judul, dan deskripsi wajib diisi', 'warning');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const res = await fetch(`${API_URL}/api/tickets`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ ...form, id_assigned: form.id_assigned || undefined }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || 'Gagal membuat ticket');
-      await Swal.fire({ icon: 'success', title: 'Ticket dibuat!', timer: 1500, showConfirmButton: false });
-      setShowCreateModal(false);
-      setForm({ id_asset: '', title: '', description: '', priority: 'Medium', id_assigned: '' });
-      fetchTickets();
-    } catch (err) {
-      Swal.fire('Gagal', (err as Error).message, 'error');
-    } finally {
-      setSubmitting(false);
-    }
   };
 
   const openDetail = (ticket: TicketItem) => {
@@ -307,19 +298,12 @@ export default function TicketsPage() {
             <h1 className="text-3xl font-bold text-gray-900">Ticketing</h1>
             <p className="text-gray-500 mt-1 text-sm flex items-center gap-2">
               Kelola permintaan maintenance dan laporan kerusakan aset
-              <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${wsConnected ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+              <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${wsConnected ? 'bg-green-100 text-green-700' : wsOpen ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-600'}`}>
                 {wsConnected ? <Wifi size={10} /> : <WifiOff size={10} />}
-                {wsConnected ? 'Realtime' : 'Connecting...'}
+                {wsConnected ? 'Realtime' : wsOpen ? 'Authenticating...' : 'Auto-refresh 5s'}
               </span>
             </p>
           </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-2xl font-medium text-sm shadow-lg shadow-blue-600/20 transition"
-          >
-            <Plus size={16} />
-            Buat Ticket
-          </button>
         </div>
 
         {/* Status cards */}
@@ -346,6 +330,7 @@ export default function TicketsPage() {
           <div className="relative flex-1">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
+              data-tour="ticket-search"
               type="text"
               placeholder="Cari ticket atau nama aset..."
               value={search}
@@ -356,6 +341,7 @@ export default function TicketsPage() {
           <div className="flex items-center gap-2">
             <Filter size={14} className="text-gray-400 shrink-0" />
             <select
+              data-tour="ticket-priority-filter"
               value={priorityFilter}
               onChange={(e) => { setPriorityFilter(e.target.value); setPage(1); }}
               className="text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 outline-none focus:ring-2 focus:ring-blue-400"
@@ -366,7 +352,7 @@ export default function TicketsPage() {
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-2xl shadow-sm mt-4 overflow-hidden animate-[enterUp_0.5s_0.22s_ease-out_both]">
+        <div data-tour="ticket-table" className="bg-white rounded-2xl shadow-sm mt-4 overflow-hidden animate-[enterUp_0.5s_0.22s_ease-out_both]">
           <div className="overflow-x-auto">
             <table className="w-full min-w-200">
               <thead>
@@ -469,7 +455,7 @@ export default function TicketsPage() {
 
       {/* Detail Panel */}
       {(selectedTicket || panelClosing) && (
-        <div className="fixed inset-0 z-50">
+        <div className="fixed inset-0 z-9999">
           <div onClick={closePanel} className={`absolute inset-0 bg-black/40 backdrop-blur-[2px] ${panelClosing ? 'panel-bg-fade-out' : 'panel-bg-fade'}`} />
           <div className="absolute inset-y-0 right-0 flex">
             <div className={`${panelClosing ? 'panel-slide-out' : 'panel-slide-in'} bg-white shadow-2xl w-full max-w-md h-full flex flex-col overflow-hidden`}>
@@ -584,97 +570,6 @@ export default function TicketsPage() {
         </div>
       )}
 
-      {/* Create Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div onClick={() => setShowCreateModal(false)} className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
-          <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900">Buat Ticket Baru</h2>
-              <button onClick={() => setShowCreateModal(false)} className="w-9 h-9 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400">
-                <Plus size={18} className="rotate-45" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Aset *</label>
-                <select
-                  value={form.id_asset}
-                  onChange={(e) => setForm((f) => ({ ...f, id_asset: e.target.value }))}
-                  className="w-full mt-1.5 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 text-sm"
-                >
-                  <option value="">— Pilih Aset —</option>
-                  {assets.map((a) => <option key={a.id} value={a.id}>{a.asset_name}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-gray-700">Judul Ticket *</label>
-                <input
-                  type="text"
-                  placeholder="Contoh: AC tidak dingin di lantai 3"
-                  value={form.title}
-                  onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                  className="w-full mt-1.5 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-gray-700">Deskripsi *</label>
-                <textarea
-                  rows={3}
-                  placeholder="Jelaskan kerusakan atau keluhan secara detail..."
-                  value={form.description}
-                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                  className="w-full mt-1.5 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 text-sm resize-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Priority</label>
-                  <select
-                    value={form.priority}
-                    onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
-                    className="w-full mt-1.5 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 text-sm"
-                  >
-                    {PRIORITY_OPTIONS.filter((p) => p !== 'All').map((p) => <option key={p}>{p}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Teknisi (opsional)</label>
-                  <select
-                    value={form.id_assigned}
-                    onChange={(e) => setForm((f) => ({ ...f, id_assigned: e.target.value }))}
-                    className="w-full mt-1.5 border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 text-sm"
-                  >
-                    <option value="">— Pilih —</option>
-                    {teknisiList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 px-6 py-5 border-t border-gray-100">
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="px-6 py-2.5 rounded-2xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition font-medium text-sm"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleCreateTicket}
-                disabled={submitting}
-                className="px-8 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-medium text-sm transition shadow-lg shadow-blue-600/20"
-              >
-                {submitting ? 'Membuat...' : 'Buat Ticket'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Maintenance form modal */}
       {showMaintenanceForm && selectedTicket && (
         <MaintenanceFormModal
@@ -693,6 +588,9 @@ export default function TicketsPage() {
           onViewAll={() => setMaintenanceResult(null)}
         />
       )}
+
+      <TourOverlay steps={TOUR_STEPS} storageKey="tickets-tour-v1" />
+      <TicketDemoFlow />
     </main>
   );
 }

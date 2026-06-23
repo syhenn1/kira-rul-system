@@ -7,6 +7,7 @@ import TourOverlay from '@/components/TourOverlay';
 import Tooltip from '@/components/Tooltip';
 import AddMaintenanceModal from '@/components/AddMaintenanceModal';
 import MaintenanceScheduledModal, { type MaintenanceScheduledResult } from '@/components/MaintenanceScheduledModal';
+import MaintenanceDemoFlow from '@/components/MaintenanceDemoFlow';
 import Swal from 'sweetalert2';
 import { Maximize2, PanelRight, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -639,6 +640,8 @@ export default function MaintenancePage() {
           }}
         />
       )}
+
+      <MaintenanceDemoFlow />
     </ProtectedRoute>
   );
 }

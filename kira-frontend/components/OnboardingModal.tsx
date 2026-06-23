@@ -387,7 +387,7 @@ function StepContent({
 
 // ─── Main modal ──────────────────────────────────────────────────────────────
 
-export default function OnboardingModal() {
+export default function OnboardingModal({ onPinSet, onOpen: onOpenCb, onClose: onCloseCb }: { onPinSet?: () => void; onOpen?: () => void; onClose?: () => void } = {}) {
   const [open, setOpen] = useState(false);
   const [steps, setSteps] = useState<StepDef[]>([]);
   const [idx, setIdx] = useState(0);
@@ -413,6 +413,7 @@ export default function OnboardingModal() {
         if (!alreadyOnboarded || !hasPin) {
           setSteps(hasPin ? ALL_STEPS.filter(s => !s.isPinStep) : ALL_STEPS);
           setOpen(true);
+          onOpenCb?.();
           setTimeout(() => setMounted(true), 40);
         }
       })
@@ -424,6 +425,7 @@ export default function OnboardingModal() {
     setTimeout(() => {
       localStorage.setItem(ONBOARDED_KEY, '1');
       setOpen(false);
+      onCloseCb?.();
     }, 300);
   };
 
@@ -447,6 +449,7 @@ export default function OnboardingModal() {
       });
       if (!r.ok) throw new Error((await r.json()).error || 'Gagal menyimpan PIN');
       setPinDone(true);
+      onPinSet?.();
       setTimeout(dismiss, 1600);
     } catch (e) { setPinError((e as Error).message); }
     finally { setPinLoading(false); }

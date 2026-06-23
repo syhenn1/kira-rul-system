@@ -6,6 +6,7 @@ interface TooltipProps {
   content: string;
   children: ReactNode;
   position?: 'top' | 'bottom' | 'left' | 'right';
+  disabled?: boolean;
 }
 
 const POS_CLASSES = {
@@ -15,8 +16,10 @@ const POS_CLASSES = {
   right:  'left-full  top-1/2  -translate-y-1/2  ml-2 origin-left',
 };
 
-export default function Tooltip({ content, children, position = 'top' }: TooltipProps) {
+export default function Tooltip({ content, children, position = 'top', disabled = false }: TooltipProps) {
   const [visible, setVisible] = useState(false);
+
+  if (disabled) return <>{children}</>;
 
   return (
     <div

@@ -1103,6 +1103,7 @@ async function main() {
     { name: 'Lukman Hakim',    email: 'lukman.hakim@teknisi.kira.id',    phone: '081234560016', specialization: 'Plumbing',         experience_years: 8,  teknisi_status: 'Tersedia' },
     { name: 'Muhamad Iqbal',   email: 'muhamad.iqbal@teknisi.kira.id',   phone: '081234560018', specialization: 'Security Sistem', experience_years: 6,  teknisi_status: 'Tersedia' },
     { name: 'Ogi Firmansyah',  email: 'ogi.firmansyah@teknisi.kira.id',  phone: '081234560020', specialization: 'Fire Protection', experience_years: 7,  teknisi_status: 'Tersedia' },
+    { name: 'PNJ Teknisi',     email: 'pnj@teknisi.com',                 phone: '081234560099', specialization: 'Mechanical',      experience_years: 4,  teknisi_status: 'Tersedia' },
   ];
 
   const techniciansToInsert = rawTechnicians.map((t) => ({
